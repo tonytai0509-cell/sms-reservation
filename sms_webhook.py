@@ -845,14 +845,24 @@ def webhook_sms():
                         date_rdv = datetime.fromisoformat(donnees_completes["date"]).replace(
                             hour=heure_rdv_h, minute=heure_rdv_m, tzinfo=FUSEAU_HORAIRE
                         )
-                        marge_securite_minutes = 20
+                        # Marge de securite adaptee a la longueur du trajet :
+                        # 15 min pour les petites courses (< 30 min de trajet),
+                        # 30 min pour les grosses courses (>= 30 min de trajet).
+                        marge_securite_minutes = 15 if duree_trajet < 30 else 30
                         heure_pc_dt = date_rdv - timedelta(minutes=duree_trajet + marge_securite_minutes)
+
+                        # Arrondi au multiple de 5 minutes le plus proche
+                        # (ex: 11h34 -> 11h35, 11h33 -> 11h30).
+                        minutes_totales = heure_pc_dt.hour * 60 + heure_pc_dt.minute
+                        minutes_arrondies = round(minutes_totales / 5) * 5
+                        heure_pc_dt = heure_pc_dt.replace(hour=0, minute=0) + timedelta(minutes=minutes_arrondies)
+
                         donnees_completes["heure_iso"] = heure_pc_dt.replace(tzinfo=None).isoformat()
                         donnees_completes["heure"] = heure_pc_dt.strftime("%Hh%M")
                         heure_estimee = True
                         log.info(
-                            "Heure de prise en charge estimee pour %s : %s (trajet %d min + marge)",
-                            expediteur, donnees_completes["heure"], duree_trajet,
+                            "Heure de prise en charge estimee pour %s : %s (trajet %d min + marge %d min, arrondi)",
+                            expediteur, donnees_completes["heure"], duree_trajet, marge_securite_minutes,
                         )
 
                 champs_manquants = [
