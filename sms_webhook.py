@@ -50,8 +50,10 @@ Champs a extraire :
   on utilisera alors le numero qui a envoye le SMS)
 - prise_en_charge : adresse ou lieu de depart (ou null si absent)
 - destination : adresse ou lieu d'arrivee (ou null si absent)
-- heure : heure et/ou date de prise en charge, telle que mentionnee dans le
-  message, ex: "demain 8h30" (ou null si absent)
+- heure : heure precise de prise en charge (ex: "demain 8h30", "20h",
+  "aujourd'hui 14h"). IMPORTANT : une date seule sans heure precise
+  (ex: juste "demain" ou juste "aujourd'hui") NE COMPTE PAS comme une heure
+  valide -> mets null dans ce cas, il faut une heure chiffree.
 
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
@@ -66,25 +68,32 @@ CHAMPS_OBLIGATOIRES = {
     "heure": "l'heure de prise en charge",
 }
 
-# Memoire des reservations en cours de completion, par numero de telephone.
-# Format : { "+336...": {"donnees": {...}, "derniere_maj": timestamp_unix} }
+# Champs "factuels" utilises pour savoir si un SMS apporte une nouvelle info
+# ou non (le champ "type" est exclu car l'IA lui donne toujours une valeur,
+# meme quand le message ne parle pas du tout d'une reservation).
+CHAMPS_FACTUELS = ["nom", "telephone", "prise_en_charge", "destination", "heure"]
+
+# Memoire des reservations par numero de telephone, qu'elles soient
+# completes ou non. Permet de repondre correctement a un message de suivi
+# ("a quelle heure ?") sans tout redemander, et de fusionner les infos
+# entre plusieurs SMS d'une meme demande.
+# Format : { "+336...": {"donnees": {...}, "derniere_maj": ts, "complete": bool} }
 # Simple dictionnaire en RAM : suffisant pour ce volume, se vide si le
-# service redemarre (acceptable, les clients recevront juste une nouvelle
-# demande de precisions dans ce cas rare).
+# service redemarre (acceptable, cas rare).
 MEMOIRE_RESERVATIONS: dict[str, dict] = {}
 DUREE_EXPIRATION_SECONDES = 60 * 60  # 1 heure
 
 
-def recuperer_donnees_en_cours(numero: str) -> dict:
-    """Renvoie les infos deja connues pour ce numero si elles n'ont pas
-    expire (plus d'1h sans nouveau message), sinon un dict vide."""
+def recuperer_entree(numero: str) -> dict | None:
+    """Renvoie l'entree memorisee pour ce numero (donnees + statut complete)
+    si elle n'a pas expire (plus d'1h sans nouveau message), sinon None."""
     entree = MEMOIRE_RESERVATIONS.get(numero)
     if entree is None:
-        return {}
+        return None
     if time.time() - entree["derniere_maj"] > DUREE_EXPIRATION_SECONDES:
         MEMOIRE_RESERVATIONS.pop(numero, None)
-        return {}
-    return entree["donnees"]
+        return None
+    return entree
 
 
 def fusionner(anciennes: dict, nouvelles: dict) -> dict:
@@ -99,12 +108,20 @@ def fusionner(anciennes: dict, nouvelles: dict) -> dict:
     return fusion
 
 
-def sauvegarder_donnees_en_cours(numero: str, donnees: dict) -> None:
-    MEMOIRE_RESERVATIONS[numero] = {"donnees": donnees, "derniere_maj": time.time()}
+def possede_info_reservation(donnees: dict) -> bool:
+    """Indique si l'extraction IA a trouve au moins une info de reservation
+    (nom, telephone, adresse, destination ou heure) dans le message, par
+    opposition a un message de suivi (question, remerciement, etc.) qui ne
+    contient aucune de ces infos."""
+    return any(donnees.get(champ) for champ in CHAMPS_FACTUELS)
 
 
-def effacer_donnees_en_cours(numero: str) -> None:
-    MEMOIRE_RESERVATIONS.pop(numero, None)
+def sauvegarder_entree(numero: str, donnees: dict, complete: bool) -> None:
+    MEMOIRE_RESERVATIONS[numero] = {
+        "donnees": donnees,
+        "derniere_maj": time.time(),
+        "complete": complete,
+    }
 
 
 def extraire_reservation(message: str) -> dict | None:
@@ -256,19 +273,29 @@ def webhook_sms():
             )
         else:
             log.info("Extraction IA (ce message) : %s", donnees_extraites)
-            donnees_precedentes = recuperer_donnees_en_cours(expediteur)
-            donnees_completes = fusionner(donnees_precedentes, donnees_extraites)
-            log.info("Donnees cumulees pour %s : %s", expediteur, donnees_completes)
+            entree_existante = recuperer_entree(expediteur)
+            donnees_existantes = entree_existante["donnees"] if entree_existante else {}
 
-            texte_reponse = construire_reponse(donnees_completes)
-
-            champs_manquants = [
-                c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
-            ]
-            if champs_manquants:
-                sauvegarder_donnees_en_cours(expediteur, donnees_completes)
+            if not possede_info_reservation(donnees_extraites) and entree_existante:
+                # Le SMS ne contient aucune nouvelle info de reservation
+                # (ex: "a quelle heure ?", "merci", "c'est confirme ?") et on
+                # a deja une reservation en memoire pour ce numero -> on la
+                # rappelle plutot que de redemander toutes les infos.
+                log.info("Message de suivi detecte pour %s, rappel de la reservation existante", expediteur)
+                texte_reponse = construire_reponse(donnees_existantes)
+                # On prolonge la duree de vie de la memoire puisque le client
+                # est toujours en train d'echanger sur cette reservation.
+                sauvegarder_entree(expediteur, donnees_existantes, entree_existante["complete"])
             else:
-                effacer_donnees_en_cours(expediteur)
+                donnees_completes = fusionner(donnees_existantes, donnees_extraites)
+                log.info("Donnees cumulees pour %s : %s", expediteur, donnees_completes)
+
+                texte_reponse = construire_reponse(donnees_completes)
+
+                champs_manquants = [
+                    c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
+                ]
+                sauvegarder_entree(expediteur, donnees_completes, complete=not champs_manquants)
 
         envoyer_sms(expediteur, texte_reponse)
 
