@@ -60,9 +60,17 @@ Champs :
 - telephone : numero de contact different de l'expediteur, si mentionne.
 - prise_en_charge : adresse ou lieu de depart complet (numero + nom de rue).
 - destination : adresse ou lieu d'arrivee.
-- heure : heure precise de prise en charge (ex: "demain 8h30", "20h"). Une
-  date seule sans heure chiffree (ex: juste "demain") NE COMPTE PAS comme
-  une heure valide.
+- heure_rdv : heure du rendez-vous/consultation/evenement lui-meme, si le
+  client la mentionne (ex: "j'ai rendez-vous a 12h", "consultation a 14h").
+  C'est une info indicative, PAS l'heure a laquelle le chauffeur doit venir.
+- heure : heure precise a laquelle le CHAUFFEUR doit venir chercher le
+  client (ex: "venez me chercher a 8h30", "prise en charge 8h", ou une heure
+  donnee directement sans mention de rendez-vous). ATTENTION : si le client
+  dit seulement "j'ai rendez-vous a 12h" ou "consultation a 14h" SANS
+  preciser separement l'heure de prise en charge souhaitee, ALORS heure
+  reste null (ce n'est pas la meme chose que heure_rdv) -- il faudra la lui
+  demander explicitement. Une date seule sans heure chiffree (ex: juste
+  "demain") NE COMPTE PAS non plus comme une heure valide.
 - est_question : true si le nouveau message est une question ou une
   remarque du client (ex: "a quelle heure venez-vous ?", "c'est confirme ?",
   "merci") qui n'apporte AUCUNE nouvelle info de reservation exploitable
@@ -78,14 +86,14 @@ Regles generales :
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure": ..., "est_question": true/false}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "est_question": true/false}
 """
 
 CHAMPS_OBLIGATOIRES = {
     "nom": "votre nom",
     "prise_en_charge": "l'adresse de prise en charge",
     "destination": "la destination",
-    "heure": "l'heure de prise en charge",
+    "heure": "l'heure a laquelle le chauffeur doit venir vous chercher",
 }
 
 # Memoire des reservations par numero de telephone, qu'elles soient
@@ -185,27 +193,30 @@ def extraire_reservation(message: str, connu: dict | None = None) -> dict | None
 def construire_reponse(donnees: dict) -> str:
     """Construit le SMS de reponse selon que la reservation est complete ou non."""
     manquants = [
-        libelle
-        for champ, libelle in CHAMPS_OBLIGATOIRES.items()
+        champ
+        for champ in CHAMPS_OBLIGATOIRES
         if not donnees.get(champ)
     ]
 
     if manquants:
-        return "Merci de preciser : " + ", ".join(manquants) + "."
+        # Cas particulier frequent en medical : le client a donne l'heure de
+        # son rendez-vous mais pas l'heure a laquelle le chauffeur doit
+        # venir -> on le precise clairement pour eviter la confusion.
+        if manquants == ["heure"] and donnees.get("heure_rdv"):
+            return (
+                f"Votre rendez-vous est note a {donnees['heure_rdv']}. "
+                "A quelle heure souhaitez-vous que le chauffeur vienne vous chercher ?"
+            )
+        libelles = [CHAMPS_OBLIGATOIRES[c] for c in manquants]
+        return "Merci de preciser : " + ", ".join(libelles) + "."
 
-    type_course = "medical" if donnees.get("type") == "medical" else "prive"
     nom = donnees["nom"]
     heure = donnees["heure"]
     depart = donnees["prise_en_charge"]
     destination = donnees["destination"]
 
-    if type_course == "medical":
-        return (
-            f"C'est note pour {nom} : {heure}, depart {depart}, "
-            f"direction {destination}. Un chauffeur vous contactera."
-        )
     return (
-        f"C'est note pour {nom} : {heure}, depart {depart}, "
+        f"C'est note pour {nom} : prise en charge {heure}, depart {depart}, "
         f"direction {destination}. Un chauffeur vous contactera."
     )
 
