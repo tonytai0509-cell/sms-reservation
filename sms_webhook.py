@@ -989,6 +989,23 @@ def webhook_sms():
     return jsonify({"status": "ok"}), 200
 
 
+@app.route("/admin/verifier-memoire", methods=["GET"])
+def verifier_memoire():
+    """Affiche l'etat de la memoire des reservations en cours, et confirme
+    si le fichier de persistance existe bien sur le volume /data. Utile
+    pour verifier que la persistance survit a un redemarrage."""
+    fichier_existe = os.path.isfile(FICHIER_MEMOIRE_RESERVATIONS)
+    taille_fichier = os.path.getsize(FICHIER_MEMOIRE_RESERVATIONS) if fichier_existe else 0
+    return jsonify({
+        "dossier_donnees": DOSSIER_DONNEES,
+        "fichier_persistance": FICHIER_MEMOIRE_RESERVATIONS,
+        "fichier_existe_sur_disque": fichier_existe,
+        "taille_fichier_octets": taille_fichier,
+        "nombre_entrees_en_memoire": len(MEMOIRE_RESERVATIONS),
+        "numeros_en_memoire": list(MEMOIRE_RESERVATIONS.keys()),
+    }), 200
+
+
 @app.route("/", methods=["GET"])
 def racine():
     return (
