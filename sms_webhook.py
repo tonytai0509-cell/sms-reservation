@@ -361,6 +361,46 @@ def extraire_reservation(message: str, connu: dict | None = None) -> dict | None
         return None
 
 
+# Adresses completes verifiees des principaux etablissements de sante de
+# la region de Nice, utilisees UNIQUEMENT pour ameliorer la precision du
+# calcul de trajet (Distance Matrix) quand le client ecrit juste un nom
+# court/raccourci (ex: "tzanck") que Google Maps ne localise pas de facon
+# fiable tout seul. Le texte affiche au client dans les SMS reste celui
+# qu'il a lui-meme ecrit, cette table ne sert qu'en coulisses.
+ADRESSES_ETABLISSEMENTS_SANTE = {
+    "les sources": "Hopital Les Sources, 10 chemin Rene Pietruschi, 06100 Nice",
+    "saint-george": "Clinique Saint George, 2 avenue de Rimiez, 06100 Nice",
+    "saint george": "Clinique Saint George, 2 avenue de Rimiez, 06100 Nice",
+    "pasteur": "Hopital Pasteur, 30 avenue de la Voie Romaine, 06000 Nice",
+    "archet": "Hopital de l'Archet, 151 route Saint-Antoine de Ginestiere, 06200 Nice",
+    "lenval": "Hopitaux Pediatriques de Nice CHU-Lenval, 57 avenue de la Californie, 06200 Nice",
+    "antoine lacassagne": "Centre Antoine Lacassagne, 33 avenue de Valombrose, 06189 Nice",
+    "lacassagne": "Centre Antoine Lacassagne, 33 avenue de Valombrose, 06189 Nice",
+    "parc imperial": "Clinique du Parc Imperial, 28 boulevard du Tzarewitch, 06000 Nice",
+    "saint-antoine": "Clinique Saint-Antoine, 7 avenue Durante, 06000 Nice",
+    "saint antoine": "Clinique Saint-Antoine, 7 avenue Durante, 06000 Nice",
+    "santa maria": "Polyclinique Santa Maria, 57 avenue de la Californie, 06200 Nice",
+    "saint-francois": "Clinique Saint-Francois, 10 boulevard Pasteur, 06000 Nice",
+    "saint francois": "Clinique Saint-Francois, 10 boulevard Pasteur, 06000 Nice",
+    "cimiez": "Hopital Cimiez, 4 avenue Reine Victoria, 06003 Nice",
+    "saint jean": "Polyclinique Saint Jean, 92 avenue du Docteur Maurice Donat, 06800 Cagnes-sur-Mer",
+    "tzanck": "Institut Arnault Tzanck, 231 avenue du Docteur Maurice Donat, 06721 Saint-Laurent-du-Var",
+    "crc nice": "Institut Arnault Tzanck, 231 avenue du Docteur Maurice Donat, 06721 Saint-Laurent-du-Var",
+}
+
+
+def resoudre_adresse_medicale(adresse: str) -> str:
+    """Si l'adresse contient un raccourci d'etablissement de sante connu
+    (ex: 'tzanck', 'les sources'), renvoie l'adresse complete verifiee pour
+    ameliorer la fiabilite du geocodage Google Maps. Sinon renvoie l'adresse
+    telle quelle."""
+    adresse_minuscule = (adresse or "").lower()
+    for cle, adresse_complete in ADRESSES_ETABLISSEMENTS_SANTE.items():
+        if cle in adresse_minuscule:
+            return adresse_complete
+    return adresse
+
+
 def estimer_duree_trajet(origine: str, destination: str) -> int | None:
     """Estime la duree du trajet en minutes entre deux adresses via l'API
     Google Distance Matrix. Renvoie None si indisponible ou en echec."""
@@ -560,18 +600,27 @@ def creer_evenement_agenda(
     heure_aff = debut_dt.strftime("%Hh%M")
     reference = reference or generer_reference()
 
+    # Le champ RDV doit afficher l'heure REELLE du rendez-vous (heure_rdv),
+    # differente de l'heure de prise en charge (PC) quand elle a ete estimee
+    # a partir du trajet. Si aucune heure_rdv n'est connue (course privee
+    # sans rendez-vous a proprement parler), PC et RDV sont la meme chose.
+    heure_rdv_minute = parser_heure_texte(donnees.get("heure_rdv") or "")
+    heure_rdv_aff = (
+        f"{heure_rdv_minute[0]:02d}h{heure_rdv_minute[1]:02d}" if heure_rdv_minute else heure_aff
+    )
+
     titre = (
         f"PC {heure_aff} M. {donnees['nom']} | "
         f"PC : {donnees['prise_en_charge']} | "
         f"DEST : {donnees['destination']} | "
-        f"RDV : {heure_aff} {type_tag} | "
+        f"RDV : {heure_rdv_aff} {type_tag} | "
         f"TEL : {telephone} | REF : {reference}"
     ).upper()
     description = (
         f"REF : {reference}\n"
         f"PC : {donnees['prise_en_charge']}\n"
         f"DEST : {donnees['destination']}\n"
-        f"RDV : {heure_aff} {type_tag}\n"
+        f"RDV : {heure_rdv_aff} {type_tag}\n"
         f"TEL : {telephone}"
     ).upper()
 
@@ -922,7 +971,8 @@ def webhook_sms():
                     # temps de trajet reel + une marge de securite.
                     heure_minute = parser_heure_texte(donnees_completes["heure_rdv"])
                     duree_trajet = estimer_duree_trajet(
-                        donnees_completes["prise_en_charge"], donnees_completes["destination"]
+                        resoudre_adresse_medicale(donnees_completes["prise_en_charge"]),
+                        resoudre_adresse_medicale(donnees_completes["destination"]),
                     )
                     if heure_minute and duree_trajet is not None:
                         heure_rdv_h, heure_rdv_m = heure_minute
