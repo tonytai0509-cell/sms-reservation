@@ -294,7 +294,13 @@ def creer_evenement_agenda(donnees: dict, numero_expediteur: str = "") -> tuple[
     telephone = donnees.get("telephone") or numero_expediteur or "(non renseigne)"
     heure_aff = debut_dt.strftime("%Hh%M")
 
-    titre = f"PC {heure_aff} M. {donnees['nom']}".upper()
+    titre = (
+        f"PC {heure_aff} M. {donnees['nom']} | "
+        f"PC : {donnees['prise_en_charge']} | "
+        f"DEST : {donnees['destination']} | "
+        f"RDV : {heure_aff} {type_tag} | "
+        f"TEL : {telephone}"
+    ).upper()
     description = (
         f"PC : {donnees['prise_en_charge']}\n"
         f"DEST : {donnees['destination']}\n"
