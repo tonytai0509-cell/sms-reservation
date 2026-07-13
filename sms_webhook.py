@@ -17,8 +17,7 @@ Variables d'environnement necessaires (a mettre sur Railway) :
   ANTHROPIC_API_KEY           -> cle API Anthropic (console.anthropic.com), pour l'extraction IA
   GOOGLE_SERVICE_ACCOUNT_JSON -> contenu JSON complet de la cle du compte de service Google
   GOOGLE_CALENDAR_ID          -> adresse email du calendrier Google a utiliser (souvent ton email)
-  EMAIL_EXPEDITEUR            -> adresse Gmail utilisee pour envoyer les confirmations (ex: centraleeasytaxi@gmail.com)
-  EMAIL_MOT_DE_PASSE_APP      -> mot de passe d'application Gmail (16 caracteres, genere sur myaccount.google.com)
+  RESEND_API_KEY              -> cle API Resend (resend.com), pour l'envoi d'email (HTTPS, pas de SMTP bloque)
   EMAIL_DESTINATAIRE          -> adresse email qui recoit les confirmations (ex: tony.tai0509@gmail.com)
 """
 
@@ -29,11 +28,9 @@ import logging
 import os
 import random
 import re
-import smtplib
 import string
 import time
 from datetime import datetime, timedelta
-from email.mime.text import MIMEText
 from zoneinfo import ZoneInfo
 
 import requests
@@ -58,8 +55,7 @@ GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
 FUSEAU_HORAIRE = ZoneInfo("Europe/Paris")
 
-EMAIL_EXPEDITEUR = os.environ.get("EMAIL_EXPEDITEUR", "")
-EMAIL_MOT_DE_PASSE_APP = os.environ.get("EMAIL_MOT_DE_PASSE_APP", "")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 EMAIL_DESTINATAIRE = os.environ.get("EMAIL_DESTINATAIRE", "")
 
 PROMPT_SYSTEME = """Tu geres une conversation SMS avec un client qui reserve un taxi.
@@ -483,8 +479,9 @@ def supprimer_evenement_agenda(event_id: str) -> tuple[bool, str]:
 
 
 def envoyer_email_confirmation(donnees: dict, numero_expediteur: str, reference: str) -> tuple[bool, str]:
-    """Envoie un email de confirmation de reservation via Gmail SMTP."""
-    if not (EMAIL_EXPEDITEUR and EMAIL_MOT_DE_PASSE_APP and EMAIL_DESTINATAIRE):
+    """Envoie un email de confirmation de reservation via l'API Resend
+    (HTTPS, contrairement au SMTP qui est bloque en sortie sur Railway)."""
+    if not (RESEND_API_KEY and EMAIL_DESTINATAIRE):
         return False, "Email non configure (variables manquantes sur Railway)"
 
     type_label = "MEDICAL" if donnees.get("type") == "medical" else "PRIVE"
@@ -509,24 +506,30 @@ def envoyer_email_confirmation(donnees: dict, numero_expediteur: str, reference:
         f"Destination : {donnees['destination']}\n"
     )
 
-    message = MIMEText(corps)
-    message["Subject"] = f"Reservation taxi - {donnees['nom']} - Ref {reference}"
-    message["From"] = EMAIL_EXPEDITEUR
-    message["To"] = EMAIL_DESTINATAIRE
-
     try:
-        # Port 587 (STARTTLS) plutot que 465 (SSL direct) : certains
-        # hebergeurs comme Railway filtrent le port 465 en sortie, ce qui
-        # bloquait la connexion indefiniment. On ajoute aussi un timeout
-        # explicite pour ne jamais faire planter le service en cas de
-        # nouveau souci reseau.
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as serveur:
-            serveur.starttls()
-            serveur.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE_APP)
-            serveur.send_message(message)
-        return True, "email envoye"
-    except Exception as e:
-        return False, str(e)
+        reponse = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                # Domaine de test fourni par Resend, fonctionne sans
+                # verification de domaine mais uniquement vers l'adresse
+                # email utilisee pour creer le compte Resend.
+                "from": "EasyTaxi <onboarding@resend.dev>",
+                "to": [EMAIL_DESTINATAIRE],
+                "subject": f"Reservation taxi - {donnees['nom']} - Ref {reference}",
+                "text": corps,
+            },
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        return False, f"Erreur reseau : {e}"
+
+    if reponse.status_code >= 300:
+        return False, f"Statut {reponse.status_code} : {reponse.text[:300]}"
+    return True, "email envoye"
 
 
 if GATEWAY_MODE == "local":
@@ -730,6 +733,14 @@ def webhook_sms():
                 event_id_a_conserver = None
                 reference_a_conserver = None
 
+                # Protection anti-doublon : si la reservation etait deja
+                # complete ET que rien n'a change par rapport a avant, on
+                # ne renvoie pas de SMS (evite le spam en cas de livraison
+                # en double du meme SMS par SMS Gateway).
+                if etait_deja_complete and donnees_completes == donnees_existantes:
+                    log.info("Message identique a une reservation deja complete pour %s, ignore", expediteur)
+                    return jsonify({"status": "ok", "info": "doublon ignore"}), 200
+
                 if est_complete_maintenant and not etait_deja_complete:
                     # Limite anti-abus : pas plus de MAX_RESERVATIONS_ACTIVES
                     # reservations futures en meme temps pour un numero.
@@ -931,3 +942,4 @@ def tester_email():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+
