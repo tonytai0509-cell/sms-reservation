@@ -415,13 +415,20 @@ def libelle_date_relative(dt: datetime) -> str:
     return dt.strftime("le %d/%m")
 
 
-def construire_reponse(donnees: dict, reference: str = "", heure_estimee: bool = False) -> str:
-    """Construit le SMS de reponse selon que la reservation est complete ou non."""
+def construire_reponse(
+    donnees: dict, reference: str = "", heure_estimee: bool = False,
+    premier_message: bool = False,
+) -> str:
+    """Construit le SMS de reponse selon que la reservation est complete ou non.
+    Si premier_message est True, la reponse commence par une courte
+    presentation de Kelly (uniquement pour le tout premier message d'une
+    nouvelle conversation, pas les relances suivantes)."""
     manquants = [
         champ
         for champ in CHAMPS_OBLIGATOIRES
         if not donnees.get(champ)
     ]
+    intro = "Bonjour, je suis Kelly, la secretaire de la Centrale Taxi Nicoise. " if premier_message else ""
 
     if manquants:
         # Cas particulier frequent en medical : le client a donne l'heure de
@@ -429,11 +436,13 @@ def construire_reponse(donnees: dict, reference: str = "", heure_estimee: bool =
         # venir -> on le precise clairement pour eviter la confusion.
         if manquants == ["heure"] and donnees.get("heure_rdv"):
             return (
-                f"Votre rendez-vous est note a {donnees['heure_rdv']}. "
+                f"{intro}Votre rendez-vous est note a {donnees['heure_rdv']}. "
                 "A quelle heure souhaitez-vous que le chauffeur vienne vous chercher ?"
             )
         libelles = [CHAMPS_OBLIGATOIRES[c] for c in manquants]
-        return "Merci de preciser :\n" + "\n".join(f"- {libelle}" for libelle in libelles)
+        return f"{intro}Pour reserver votre taxi, il me manque juste :\n" + "\n".join(
+            f"- {libelle}" for libelle in libelles
+        )
 
     nom = donnees["nom"]
     depart = donnees["prise_en_charge"]
@@ -984,7 +993,7 @@ def webhook_sms():
 
                 texte_reponse = construire_reponse(
                     donnees_completes, reference_a_conserver if est_complete_maintenant else "",
-                    heure_estimee=heure_estimee,
+                    heure_estimee=heure_estimee, premier_message=(entree_existante is None),
                 )
 
                 sauvegarder_entree(
