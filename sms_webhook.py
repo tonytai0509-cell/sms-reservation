@@ -40,25 +40,45 @@ LOCAL_URL = os.environ.get("SMS_GATEWAY_LOCAL_URL", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 
-PROMPT_SYSTEME = """Tu extrais les informations d'une reservation de taxi a partir d'un SMS en francais.
+PROMPT_SYSTEME = """Tu geres une conversation SMS avec un client qui reserve un taxi.
+Tu recois : les informations DEJA CONNUES sur sa reservation (peuvent etre
+vides), et le NOUVEAU message qu'il vient d'envoyer.
 
-Champs a extraire :
+Ta tache : renvoyer la version A JOUR complete des informations, en
+combinant intelligemment les infos deja connues avec ce que le nouveau
+message apporte.
+
+Champs :
 - type : "prive" ou "medical". Medical si mention d'un hopital, clinique, CHU,
   service medical (ex: "neurologie", "dialyse"), medecin, etc. Sinon prive.
-- nom : nom du client mentionne dans le message (ou null si absent)
-- telephone : numero de contact mentionne dans le message (ou null si absent,
-  on utilisera alors le numero qui a envoye le SMS)
-- prise_en_charge : adresse ou lieu de depart (ou null si absent)
-- destination : adresse ou lieu d'arrivee (ou null si absent)
-- heure : heure precise de prise en charge (ex: "demain 8h30", "20h",
-  "aujourd'hui 14h"). IMPORTANT : une date seule sans heure precise
-  (ex: juste "demain" ou juste "aujourd'hui") NE COMPTE PAS comme une heure
-  valide -> mets null dans ce cas, il faut une heure chiffree.
+- nom : nom de famille du client. Ne provient JAMAIS d'un mot comme "avenue",
+  "rue", "boulevard", "chemin", "allee", "impasse" -- ce sont des adresses,
+  pas des noms. Un nom apparait typiquement apres "je suis", "M.", "Mme",
+  "pour M./Mme", ou en signature. Si le nouveau message ne contient pas de
+  nom clairement identifiable, garde le nom deja connu (ne le remplace pas
+  par un mot d'adresse).
+- telephone : numero de contact different de l'expediteur, si mentionne.
+- prise_en_charge : adresse ou lieu de depart complet (numero + nom de rue).
+- destination : adresse ou lieu d'arrivee.
+- heure : heure precise de prise en charge (ex: "demain 8h30", "20h"). Une
+  date seule sans heure chiffree (ex: juste "demain") NE COMPTE PAS comme
+  une heure valide.
+- est_question : true si le nouveau message est une question ou une
+  remarque du client (ex: "a quelle heure venez-vous ?", "c'est confirme ?",
+  "merci") qui n'apporte AUCUNE nouvelle info de reservation exploitable
+  (au dela de repeter une info deja connue) ; false s'il apporte une info
+  nouvelle ou modifiee.
+
+Regles generales :
+- Un champ deja connu ne doit JAMAIS etre efface ou remplace par une valeur
+  moins precise ou hors-sujet. Il n'est remplace que si le nouveau message
+  apporte clairement une correction ou precision sur ce champ precis.
+- Les champs jamais renseignes restent a null.
 
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure": ...}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure": ..., "est_question": true/false}
 """
 
 CHAMPS_OBLIGATOIRES = {
@@ -67,11 +87,6 @@ CHAMPS_OBLIGATOIRES = {
     "destination": "la destination",
     "heure": "l'heure de prise en charge",
 }
-
-# Champs "factuels" utilises pour savoir si un SMS apporte une nouvelle info
-# ou non (le champ "type" est exclu car l'IA lui donne toujours une valeur,
-# meme quand le message ne parle pas du tout d'une reservation).
-CHAMPS_FACTUELS = ["nom", "telephone", "prise_en_charge", "destination", "heure"]
 
 # Memoire des reservations par numero de telephone, qu'elles soient
 # completes ou non. Permet de repondre correctement a un message de suivi
@@ -96,26 +111,6 @@ def recuperer_entree(numero: str) -> dict | None:
     return entree
 
 
-def fusionner(anciennes: dict, nouvelles: dict) -> dict:
-    """Combine les infos deja connues avec les nouvelles infos extraites du
-    dernier SMS. Les nouvelles valeurs (non nulles) remplacent les
-    anciennes ; les champs absents du nouveau message gardent leur ancienne
-    valeur."""
-    fusion = dict(anciennes)
-    for champ, valeur in nouvelles.items():
-        if valeur:
-            fusion[champ] = valeur
-    return fusion
-
-
-def possede_info_reservation(donnees: dict) -> bool:
-    """Indique si l'extraction IA a trouve au moins une info de reservation
-    (nom, telephone, adresse, destination ou heure) dans le message, par
-    opposition a un message de suivi (question, remerciement, etc.) qui ne
-    contient aucune de ces infos."""
-    return any(donnees.get(champ) for champ in CHAMPS_FACTUELS)
-
-
 def sauvegarder_entree(numero: str, donnees: dict, complete: bool) -> None:
     MEMOIRE_RESERVATIONS[numero] = {
         "donnees": donnees,
@@ -124,11 +119,21 @@ def sauvegarder_entree(numero: str, donnees: dict, complete: bool) -> None:
     }
 
 
-def extraire_reservation(message: str) -> dict | None:
-    """Appelle Claude Haiku pour extraire les infos de reservation du SMS."""
+def extraire_reservation(message: str, connu: dict | None = None) -> dict | None:
+    """Appelle Claude Haiku pour extraire/mettre a jour les infos de
+    reservation, en lui donnant le contexte deja connu (infos des messages
+    precedents de ce numero) pour qu'elle fasse la fusion intelligemment
+    plutot que de repartir de zero a chaque SMS."""
     if not ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY non configuree - extraction IA impossible")
         return None
+
+    contenu_utilisateur = (
+        f"Informations deja connues sur cette reservation : "
+        f"{json.dumps(connu or {}, ensure_ascii=False)}\n\n"
+        f"Nouveau message du client : {message}"
+    )
+
     try:
         reponse = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -141,7 +146,7 @@ def extraire_reservation(message: str) -> dict | None:
                 "model": ANTHROPIC_MODEL,
                 "max_tokens": 300,
                 "system": PROMPT_SYSTEME,
-                "messages": [{"role": "user", "content": message}],
+                "messages": [{"role": "user", "content": contenu_utilisateur}],
             },
             timeout=20,
         )
@@ -263,7 +268,11 @@ def webhook_sms():
     log.info("SMS recu de %s : %s", expediteur, message)
 
     if expediteur and message:
-        donnees_extraites = extraire_reservation(message)
+        entree_existante = recuperer_entree(expediteur)
+        donnees_existantes = entree_existante["donnees"] if entree_existante else {}
+
+        donnees_extraites = extraire_reservation(message, donnees_existantes)
+
         if donnees_extraites is None:
             # Echec de l'IA (cle manquante, erreur reseau, etc.) -> on previent
             # quand meme le client au lieu de rester silencieux.
@@ -272,22 +281,21 @@ def webhook_sms():
                 "Un chauffeur vous recontactera pour confirmer."
             )
         else:
-            log.info("Extraction IA (ce message) : %s", donnees_extraites)
-            entree_existante = recuperer_entree(expediteur)
-            donnees_existantes = entree_existante["donnees"] if entree_existante else {}
+            log.info("Extraction IA (avec contexte) : %s", donnees_extraites)
+            est_question = donnees_extraites.pop("est_question", False)
 
-            if not possede_info_reservation(donnees_extraites) and entree_existante:
-                # Le SMS ne contient aucune nouvelle info de reservation
-                # (ex: "a quelle heure ?", "merci", "c'est confirme ?") et on
-                # a deja une reservation en memoire pour ce numero -> on la
-                # rappelle plutot que de redemander toutes les infos.
-                log.info("Message de suivi detecte pour %s, rappel de la reservation existante", expediteur)
+            if est_question and entree_existante:
+                # Le SMS est une question/remarque de suivi (ex: "a quelle
+                # heure venez-vous ?"), pas une nouvelle info -> on rappelle
+                # la reservation en cours plutot que de la modifier.
+                log.info("Question de suivi detectee pour %s, rappel de la reservation", expediteur)
                 texte_reponse = construire_reponse(donnees_existantes)
-                # On prolonge la duree de vie de la memoire puisque le client
-                # est toujours en train d'echanger sur cette reservation.
                 sauvegarder_entree(expediteur, donnees_existantes, entree_existante["complete"])
             else:
-                donnees_completes = fusionner(donnees_existantes, donnees_extraites)
+                # L'IA a deja fusionne les infos connues avec le nouveau
+                # message (elle recoit le contexte), on utilise son resultat
+                # directement.
+                donnees_completes = donnees_extraites
                 log.info("Donnees cumulees pour %s : %s", expediteur, donnees_completes)
 
                 texte_reponse = construire_reponse(donnees_completes)
