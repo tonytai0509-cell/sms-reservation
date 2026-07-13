@@ -17,6 +17,9 @@ Variables d'environnement necessaires (a mettre sur Railway) :
   ANTHROPIC_API_KEY           -> cle API Anthropic (console.anthropic.com), pour l'extraction IA
   GOOGLE_SERVICE_ACCOUNT_JSON -> contenu JSON complet de la cle du compte de service Google
   GOOGLE_CALENDAR_ID          -> adresse email du calendrier Google a utiliser (souvent ton email)
+  EMAIL_EXPEDITEUR            -> adresse Gmail utilisee pour envoyer les confirmations (ex: centraleeasytaxi@gmail.com)
+  EMAIL_MOT_DE_PASSE_APP      -> mot de passe d'application Gmail (16 caracteres, genere sur myaccount.google.com)
+  EMAIL_DESTINATAIRE          -> adresse email qui recoit les confirmations (ex: tony.tai0509@gmail.com)
 """
 
 import hashlib
@@ -26,9 +29,11 @@ import logging
 import os
 import random
 import re
+import smtplib
 import string
 import time
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
 from zoneinfo import ZoneInfo
 
 import requests
@@ -52,6 +57,10 @@ ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
 FUSEAU_HORAIRE = ZoneInfo("Europe/Paris")
+
+EMAIL_EXPEDITEUR = os.environ.get("EMAIL_EXPEDITEUR", "")
+EMAIL_MOT_DE_PASSE_APP = os.environ.get("EMAIL_MOT_DE_PASSE_APP", "")
+EMAIL_DESTINATAIRE = os.environ.get("EMAIL_DESTINATAIRE", "")
 
 PROMPT_SYSTEME = """Tu geres une conversation SMS avec un client qui reserve un taxi.
 Tu recois : les informations DEJA CONNUES sur sa reservation (peuvent etre
@@ -362,6 +371,13 @@ def extraire_reference_de_description(description: str) -> str:
     return trouve.group(1).upper() if trouve else "?"
 
 
+def extraire_champ_de_description(description: str, libelle: str) -> str:
+    """Recupere la valeur d'un champ donne (ex: 'DEST', 'PC') ecrit sur sa
+    propre ligne dans la description d'un evenement Google Agenda."""
+    trouve = re.search(rf"^{libelle}\s*:\s*(.+)$", description or "", re.IGNORECASE | re.MULTILINE)
+    return trouve.group(1).strip() if trouve else "?"
+
+
 def _construire_service_agenda():
     infos_compte = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
     creds = service_account.Credentials.from_service_account_info(
@@ -462,6 +478,47 @@ def supprimer_evenement_agenda(event_id: str) -> tuple[bool, str]:
         service = _construire_service_agenda()
         service.events().delete(calendarId=GOOGLE_CALENDAR_ID, eventId=event_id).execute()
         return True, "evenement supprime"
+    except Exception as e:
+        return False, str(e)
+
+
+def envoyer_email_confirmation(donnees: dict, numero_expediteur: str, reference: str) -> tuple[bool, str]:
+    """Envoie un email de confirmation de reservation via Gmail SMTP."""
+    if not (EMAIL_EXPEDITEUR and EMAIL_MOT_DE_PASSE_APP and EMAIL_DESTINATAIRE):
+        return False, "Email non configure (variables manquantes sur Railway)"
+
+    type_label = "MEDICAL" if donnees.get("type") == "medical" else "PRIVE"
+    telephone = donnees.get("telephone") or numero_expediteur or "(non renseigne)"
+
+    try:
+        debut_dt = datetime.fromisoformat(donnees["heure_iso"]) if donnees.get("heure_iso") else None
+    except ValueError:
+        debut_dt = None
+    moment = (
+        f"{libelle_date_relative(debut_dt)} a {debut_dt.strftime('%Hh%M')}"
+        if debut_dt else donnees.get("heure", "")
+    )
+
+    corps = (
+        f"Nouvelle reservation SMS confirmee\n\n"
+        f"Reference : {reference}\n"
+        f"Type : {type_label}\n"
+        f"Nom : {donnees['nom']}\n"
+        f"Telephone : {telephone}\n"
+        f"Prise en charge : {moment} - {donnees['prise_en_charge']}\n"
+        f"Destination : {donnees['destination']}\n"
+    )
+
+    message = MIMEText(corps)
+    message["Subject"] = f"Reservation taxi - {donnees['nom']} - Ref {reference}"
+    message["From"] = EMAIL_EXPEDITEUR
+    message["To"] = EMAIL_DESTINATAIRE
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as serveur:
+            serveur.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE_APP)
+            serveur.send_message(message)
+        return True, "email envoye"
     except Exception as e:
         return False, str(e)
 
@@ -615,23 +672,25 @@ def webhook_sms():
                         # meme si elle ne contient que le code seul.
                         lignes = []
                         options = {}
-                        for ev in evenements[:5]:
-                            ref = extraire_reference_de_description(ev.get("description", ""))
+                        for i, ev in enumerate(evenements[:5], start=1):
+                            description_ev = ev.get("description", "")
+                            ref = extraire_reference_de_description(description_ev)
+                            destination_ev = extraire_champ_de_description(description_ev, "DEST")
                             options[ref] = ev["id"]
                             debut_iso = ev.get("start", {}).get("dateTime", "")
                             try:
-                                date_aff = datetime.fromisoformat(debut_iso).strftime("%d/%m %Hh%M")
+                                date_aff = datetime.fromisoformat(debut_iso).strftime("%d/%m a %Hh%M")
                             except ValueError:
                                 date_aff = debut_iso
-                            lignes.append(f"{ref} le {date_aff}")
+                            lignes.append(f"{i}) {ref} - {date_aff} - {destination_ev}")
                         MEMOIRE_ANNULATION_EN_ATTENTE[expediteur] = {
                             "options": options,
                             "expire": time.time() + DUREE_ATTENTE_ANNULATION_SECONDES,
                         }
                         texte_reponse = (
-                            "Vous avez plusieurs reservations : "
-                            + " ; ".join(lignes)
-                            + ". Repondez avec le code Ref de celle a annuler (ex: 'annulez ABC123')."
+                            "Vos reservations en cours :\n"
+                            + "\n".join(lignes)
+                            + "\n\nRepondez avec le code Ref de celle a annuler (ex: 'annulez ABC123')."
                         )
             elif plusieurs_courses:
                 # Le client decrit plusieurs trajets distincts dans le meme
@@ -686,6 +745,13 @@ def webhook_sms():
                     if succes:
                         log.info("Evenement Google Agenda cree pour %s : %s", expediteur, detail)
                         event_id_a_conserver = event_id
+                        succes_email, detail_email = envoyer_email_confirmation(
+                            donnees_completes, expediteur, reference_a_conserver
+                        )
+                        if succes_email:
+                            log.info("Email de confirmation envoye pour %s", expediteur)
+                        else:
+                            log.error("Echec envoi email pour %s : %s", expediteur, detail_email)
                     else:
                         log.error("Echec creation evenement Agenda pour %s : %s", expediteur, detail)
                         reference_a_conserver = None
@@ -835,6 +901,25 @@ def tester_agenda():
     if succes:
         return f"Evenement de test cree avec succes !<br><br>Lien : {detail}", 200
     return f"Echec de la creation de l'evenement de test :<br><br>{detail}", 200
+
+
+@app.route("/admin/tester-email", methods=["GET"])
+def tester_email():
+    """Envoie un email de test pour verifier la configuration SMTP Gmail."""
+    demain = datetime.now(FUSEAU_HORAIRE) + timedelta(days=1)
+    donnees_test = {
+        "type": "prive",
+        "nom": "Test EasyTaxi",
+        "telephone": "0600000000",
+        "prise_en_charge": "1 rue de Test",
+        "destination": "Aeroport",
+        "heure": "test",
+        "heure_iso": demain.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(),
+    }
+    succes, detail = envoyer_email_confirmation(donnees_test, "0600000000", "TEST01")
+    if succes:
+        return "Email de test envoye avec succes ! Verifie ta boite mail.", 200
+    return f"Echec de l'envoi de l'email de test :<br><br>{detail}", 200
 
 
 if __name__ == "__main__":
