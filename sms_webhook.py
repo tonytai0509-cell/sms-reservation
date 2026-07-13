@@ -216,8 +216,9 @@ def construire_reponse(donnees: dict) -> str:
     destination = donnees["destination"]
 
     return (
-        f"C'est note pour {nom} : prise en charge {heure}, depart {depart}, "
-        f"direction {destination}. Un chauffeur vous contactera."
+        f"Reservation confirmee pour M. {nom} : prise en charge {heure} "
+        f"au {depart}, direction {destination}. "
+        "Un chauffeur vous contactera peu avant son arrivee."
     )
 
 
