@@ -17,6 +17,7 @@ Variables d'environnement necessaires (a mettre sur Railway) :
   ANTHROPIC_API_KEY           -> cle API Anthropic (console.anthropic.com), pour l'extraction IA
   GOOGLE_SERVICE_ACCOUNT_JSON -> contenu JSON complet de la cle du compte de service Google
   GOOGLE_CALENDAR_ID          -> adresse email du calendrier Google a utiliser (souvent ton email)
+  GOOGLE_MAPS_API_KEY         -> cle API Google Maps (Distance Matrix), pour estimer les temps de trajet
   RESEND_API_KEY              -> cle API Resend (resend.com), pour l'envoi d'email (HTTPS, pas de SMTP bloque)
   EMAIL_DESTINATAIRE          -> adresse email qui recoit les confirmations (ex: tony.tai0509@gmail.com)
 """
@@ -53,6 +54,7 @@ ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 FUSEAU_HORAIRE = ZoneInfo("Europe/Paris")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
@@ -151,6 +153,13 @@ Champs :
 - reference_annulation : si annulation est true ET que le client cite un
   code de reference (ex: "annulez ABC123", "annulez la reservation ABC123"),
   ce code exactement tel qu'ecrit (majuscules). Sinon null.
+- confirmation_existante : true si le client semble parler d'une
+  reservation/rendez-vous DEJA CONVENU par ailleurs et demande juste une
+  confirmation (ex: "je dois etre a 9h30 aux sources, c'est ok ?", "c'est
+  bien prevu ?", "vous confirmez ?"), plutot que de faire une demande
+  complete et explicite de nouvelle reservation. false sinon.
+- reference_lookup : si confirmation_existante est true ET que le client
+  cite un code de reference, ce code (majuscules). Sinon null.
 
 Regles generales :
 - Un champ deja connu ne doit JAMAIS etre efface ou remplace par une valeur
@@ -168,7 +177,7 @@ Regles generales :
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "date": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false, "annulation": true/false, "reference_annulation": ...}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "date": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false, "annulation": true/false, "reference_annulation": ..., "confirmation_existante": true/false, "reference_lookup": ...}
 """
 
 CHAMPS_OBLIGATOIRES = {
@@ -299,6 +308,46 @@ def extraire_reservation(message: str, connu: dict | None = None) -> dict | None
         return None
 
 
+def estimer_duree_trajet(origine: str, destination: str) -> int | None:
+    """Estime la duree du trajet en minutes entre deux adresses via l'API
+    Google Distance Matrix. Renvoie None si indisponible ou en echec."""
+    if not GOOGLE_MAPS_API_KEY:
+        return None
+    try:
+        reponse = requests.get(
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            params={
+                "origins": origine,
+                "destinations": destination,
+                "region": "fr",
+                "language": "fr",
+                "key": GOOGLE_MAPS_API_KEY,
+            },
+            timeout=10,
+        )
+        corps = reponse.json()
+        element = corps["rows"][0]["elements"][0]
+        if element.get("status") != "OK":
+            log.warning("Distance Matrix statut non-OK pour %s -> %s : %s", origine, destination, element.get("status"))
+            return None
+        return round(element["duration"]["value"] / 60)
+    except Exception as e:
+        log.error("Erreur estimation trajet %s -> %s : %s", origine, destination, e)
+        return None
+
+
+def parser_heure_texte(texte: str) -> tuple[int, int] | None:
+    """Extrait une heure/minute d'un texte du type '14h', '14h30', '14:30'."""
+    trouve = re.search(r"(\d{1,2})\s*[h:]\s*(\d{2})?", texte or "")
+    if not trouve:
+        return None
+    heure = int(trouve.group(1))
+    minute = int(trouve.group(2)) if trouve.group(2) else 0
+    if 0 <= heure <= 23 and 0 <= minute <= 59:
+        return heure, minute
+    return None
+
+
 def libelle_date_relative(dt: datetime) -> str:
     """Renvoie 'aujourd'hui', 'demain', 'apres-demain' ou une date ecrite
     (ex: 'le 20/07'), selon l'ecart avec la date du jour."""
@@ -313,7 +362,7 @@ def libelle_date_relative(dt: datetime) -> str:
     return dt.strftime("le %d/%m")
 
 
-def construire_reponse(donnees: dict, reference: str = "") -> str:
+def construire_reponse(donnees: dict, reference: str = "", heure_estimee: bool = False) -> str:
     """Construit le SMS de reponse selon que la reservation est complete ou non."""
     manquants = [
         champ
@@ -355,6 +404,8 @@ def construire_reponse(donnees: dict, reference: str = "") -> str:
         f"au {depart}, direction {destination}. "
         "Un chauffeur vous contactera peu avant son arrivee."
     )
+    if heure_estimee:
+        reponse += " (Heure de prise en charge estimee selon le trajet, sera ajustee si besoin.)"
     if reference:
         reponse += f" Ref: {reference} (a rappeler pour annuler)."
     return reponse
@@ -379,6 +430,16 @@ def extraire_champ_de_description(description: str, libelle: str) -> str:
     propre ligne dans la description d'un evenement Google Agenda."""
     trouve = re.search(rf"^{libelle}\s*:\s*(.+)$", description or "", re.IGNORECASE | re.MULTILINE)
     return trouve.group(1).strip() if trouve else "?"
+
+
+def construire_recap_depuis_evenement(ev: dict) -> str:
+    """Construit un message de confirmation lisible a partir des infos
+    stockees dans la description d'un evenement Google Agenda existant."""
+    description = ev.get("description", "")
+    pc = extraire_champ_de_description(description, "PC")
+    dest = extraire_champ_de_description(description, "DEST")
+    rdv = extraire_champ_de_description(description, "RDV")
+    return f"Oui, c'est bien prevu : prise en charge {pc}, direction {dest} ({rdv})."
 
 
 def _construire_service_agenda():
@@ -639,6 +700,8 @@ def webhook_sms():
             est_question = donnees_extraites.pop("est_question", False)
             plusieurs_courses = donnees_extraites.pop("plusieurs_courses", False)
             annulation = donnees_extraites.pop("annulation", False)
+            confirmation_existante = donnees_extraites.pop("confirmation_existante", False)
+            reference_lookup = (donnees_extraites.pop("reference_lookup", None) or "").strip().upper()
 
             if annulation:
                 # Le client demande d'annuler une reservation.
@@ -708,6 +771,36 @@ def webhook_sms():
                             + "\n".join(lignes)
                             + "\n\nRepondez avec le code Ref de celle a annuler (ex: 'annulez ABC123')."
                         )
+            elif confirmation_existante:
+                # Le client demande une confirmation d'un rendez-vous deja
+                # convenu (pas une nouvelle demande de reservation).
+                if reference_lookup:
+                    evenements = rechercher_evenements(reference_lookup, seulement_futur=False)
+                    evenements = [
+                        e for e in evenements
+                        if extraire_reference_de_description(e.get("description", "")) == reference_lookup
+                    ]
+                    if len(evenements) == 1:
+                        texte_reponse = construire_recap_depuis_evenement(evenements[0])
+                    else:
+                        texte_reponse = (
+                            f"Reference {reference_lookup} introuvable. "
+                            "Verifiez le code Ref recu par SMS lors de la confirmation."
+                        )
+                else:
+                    evenements = rechercher_evenements(expediteur, seulement_futur=True)
+                    if not evenements:
+                        texte_reponse = (
+                            "Nous n'avons pas de reservation en cours pour ce numero. "
+                            "Merci de nous communiquer le numero de reference (Ref) recu par SMS."
+                        )
+                    elif len(evenements) == 1:
+                        texte_reponse = construire_recap_depuis_evenement(evenements[0])
+                    else:
+                        texte_reponse = (
+                            "Merci de nous communiquer le numero de reference (Ref) "
+                            "de la reservation concernee, recu par SMS lors de la confirmation."
+                        )
             elif plusieurs_courses:
                 # Le client decrit plusieurs trajets distincts dans le meme
                 # SMS -> on lui demande de les envoyer un par un, on ne
@@ -731,6 +824,36 @@ def webhook_sms():
                 # directement.
                 donnees_completes = donnees_extraites
                 log.info("Donnees cumulees pour %s : %s", expediteur, donnees_completes)
+
+                heure_estimee = False
+                if (
+                    not donnees_completes.get("heure")
+                    and donnees_completes.get("heure_rdv")
+                    and donnees_completes.get("date")
+                    and donnees_completes.get("prise_en_charge")
+                    and donnees_completes.get("destination")
+                ):
+                    # Le client connait son heure de rendez-vous mais pas
+                    # l'heure de prise en charge -> on l'estime a partir du
+                    # temps de trajet reel + une marge de securite.
+                    heure_minute = parser_heure_texte(donnees_completes["heure_rdv"])
+                    duree_trajet = estimer_duree_trajet(
+                        donnees_completes["prise_en_charge"], donnees_completes["destination"]
+                    )
+                    if heure_minute and duree_trajet is not None:
+                        heure_rdv_h, heure_rdv_m = heure_minute
+                        date_rdv = datetime.fromisoformat(donnees_completes["date"]).replace(
+                            hour=heure_rdv_h, minute=heure_rdv_m, tzinfo=FUSEAU_HORAIRE
+                        )
+                        marge_securite_minutes = 20
+                        heure_pc_dt = date_rdv - timedelta(minutes=duree_trajet + marge_securite_minutes)
+                        donnees_completes["heure_iso"] = heure_pc_dt.replace(tzinfo=None).isoformat()
+                        donnees_completes["heure"] = heure_pc_dt.strftime("%Hh%M")
+                        heure_estimee = True
+                        log.info(
+                            "Heure de prise en charge estimee pour %s : %s (trajet %d min + marge)",
+                            expediteur, donnees_completes["heure"], duree_trajet,
+                        )
 
                 champs_manquants = [
                     c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
@@ -787,7 +910,8 @@ def webhook_sms():
                     reference_a_conserver = entree_existante.get("reference")
 
                 texte_reponse = construire_reponse(
-                    donnees_completes, reference_a_conserver if est_complete_maintenant else ""
+                    donnees_completes, reference_a_conserver if est_complete_maintenant else "",
+                    heure_estimee=heure_estimee,
                 )
 
                 sauvegarder_entree(
@@ -944,6 +1068,20 @@ def tester_email():
     if succes:
         return "Email de test envoye avec succes ! Verifie ta boite mail.", 200
     return f"Echec de l'envoi de l'email de test :<br><br>{detail}", 200
+
+
+@app.route("/admin/tester-trajet", methods=["GET"])
+def tester_trajet():
+    """Teste l'estimation du temps de trajet entre 2 adresses (Nice -> Marseille par defaut)."""
+    origine = request.args.get("origine", "Nice, France")
+    destination = request.args.get("destination", "Hopital de la Timone, Marseille, France")
+    duree = estimer_duree_trajet(origine, destination)
+    if duree is None:
+        return (
+            f"Impossible d'estimer le trajet de '{origine}' vers '{destination}'. "
+            "Verifie GOOGLE_MAPS_API_KEY et que la Distance Matrix API est activee."
+        ), 200
+    return f"Trajet estime de '{origine}' vers '{destination}' : {duree} minutes.", 200
 
 
 if __name__ == "__main__":
