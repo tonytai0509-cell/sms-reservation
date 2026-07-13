@@ -24,6 +24,9 @@ import hmac
 import json
 import logging
 import os
+import random
+import re
+import string
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -83,6 +86,10 @@ Champs :
     meme si le nom existe egalement comme quartier residentiel (Saint-Jean
     Cap-Ferrat) : dans le doute, priviligier medical pour ce nom precis.
   - Institut Arnault Tzanck / Tzanck / CRC Nice
+  RACCOURCIS A RECONNAITRE SYSTEMATIQUEMENT (meme seuls, en minuscule, sans
+  autre contexte medical explicite) : "tzanck", "les sources", "sola" /
+  "pierre sola" -> toujours medical des que l'un de ces mots apparait comme
+  destination ou prise en charge, meme sans "hopital"/"clinique"/"centre" devant.
   Sinon (adresse residentielle, aeroport, gare, restaurant, etc.) -> prive.
 - nom : nom de famille du client. Ne provient JAMAIS d'un mot comme "avenue",
   "rue", "boulevard", "chemin", "allee", "impasse" -- ce sont des adresses,
@@ -116,6 +123,12 @@ Champs :
 - plusieurs_courses : true si le nouveau message decrit CLAIREMENT plusieurs
   trajets/courses distincts avec des destinations et/ou heures differentes
   (ex: "aller a X a 14h puis a Y a 15h"). false sinon (un seul trajet).
+- annulation : true si le nouveau message demande CLAIREMENT d'annuler la
+  reservation en cours (ex: "annulez ma course", "je veux annuler",
+  "finalement non merci, annulez", "c'est annule"). false sinon.
+- reference_annulation : si annulation est true ET que le client cite un
+  code de reference (ex: "annulez ABC123", "annulez la reservation ABC123"),
+  ce code exactement tel qu'ecrit (majuscules). Sinon null.
 
 Regles generales :
 - Un champ deja connu ne doit JAMAIS etre efface ou remplace par une valeur
@@ -133,7 +146,7 @@ Regles generales :
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false, "annulation": true/false, "reference_annulation": ...}
 """
 
 CHAMPS_OBLIGATOIRES = {
@@ -166,11 +179,23 @@ def recuperer_entree(numero: str) -> dict | None:
     return entree
 
 
-def sauvegarder_entree(numero: str, donnees: dict, complete: bool) -> None:
+def sauvegarder_entree(
+    numero: str,
+    donnees: dict,
+    complete: bool,
+    event_id: str | None = None,
+    reference: str | None = None,
+) -> None:
+    ancienne = MEMOIRE_RESERVATIONS.get(numero, {})
     MEMOIRE_RESERVATIONS[numero] = {
         "donnees": donnees,
         "derniere_maj": time.time(),
         "complete": complete,
+        # On garde l'event_id/reference existants si non fournis
+        # explicitement, pour ne pas les perdre lors des mises a jour
+        # intermediaires.
+        "event_id": event_id if event_id is not None else ancienne.get("event_id"),
+        "reference": reference if reference is not None else ancienne.get("reference"),
     }
 
 
@@ -240,7 +265,7 @@ def extraire_reservation(message: str, connu: dict | None = None) -> dict | None
         return None
 
 
-def construire_reponse(donnees: dict) -> str:
+def construire_reponse(donnees: dict, reference: str = "") -> str:
     """Construit le SMS de reponse selon que la reservation est complete ou non."""
     manquants = [
         champ
@@ -265,26 +290,76 @@ def construire_reponse(donnees: dict) -> str:
     depart = donnees["prise_en_charge"]
     destination = donnees["destination"]
 
-    return (
+    reponse = (
         f"Reservation confirmee pour M. {nom} : prise en charge {heure} "
         f"au {depart}, direction {destination}. "
         "Un chauffeur vous contactera peu avant son arrivee."
     )
+    if reference:
+        reponse += f" Ref: {reference} (a rappeler pour annuler)."
+    return reponse
 
 
-def creer_evenement_agenda(donnees: dict, numero_expediteur: str = "") -> tuple[bool, str]:
-    """Cree l'evenement correspondant dans Google Agenda via un compte de
-    service. Renvoie (succes, message_ou_lien)."""
+def generer_reference() -> str:
+    """Genere un code de reference court et facile a lire/dicter par SMS
+    (pas de 0/O ni 1/I pour eviter les confusions)."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(random.choices(alphabet, k=6))
+
+
+def extraire_reference_de_description(description: str) -> str:
+    """Recupere le code de reference ecrit dans la description d'un
+    evenement Google Agenda (ligne 'REF : XXXXXX')."""
+    trouve = re.search(r"REF\s*:\s*([A-Z0-9]+)", description or "", re.IGNORECASE)
+    return trouve.group(1).upper() if trouve else "?"
+
+
+def _construire_service_agenda():
+    infos_compte = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+    creds = service_account.Credentials.from_service_account_info(
+        infos_compte, scopes=["https://www.googleapis.com/auth/calendar"]
+    )
+    return build("calendar", "v3", credentials=creds)
+
+
+def rechercher_evenements(texte_recherche: str, seulement_futur: bool = True) -> list[dict]:
+    """Recherche les evenements Google Agenda contenant ce texte (numero de
+    telephone ou code de reference) dans leur contenu. Utilise pour
+    retrouver une reservation a annuler."""
     if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
-        return False, "Google Agenda non configure (variables manquantes sur Railway)"
+        return []
+    try:
+        service = _construire_service_agenda()
+        parametres = {
+            "calendarId": GOOGLE_CALENDAR_ID,
+            "q": texte_recherche,
+            "singleEvents": True,
+            "orderBy": "startTime",
+        }
+        if seulement_futur:
+            parametres["timeMin"] = datetime.now(FUSEAU_HORAIRE).isoformat()
+        resultat = service.events().list(**parametres).execute()
+        return resultat.get("items", [])
+    except Exception as e:
+        log.error("Erreur recherche evenements Agenda : %s", e)
+        return []
+
+
+def creer_evenement_agenda(
+    donnees: dict, numero_expediteur: str = "", reference: str = ""
+) -> tuple[bool, str, str | None]:
+    """Cree l'evenement correspondant dans Google Agenda via un compte de
+    service. Renvoie (succes, message_ou_lien, event_id)."""
+    if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
+        return False, "Google Agenda non configure (variables manquantes sur Railway)", None
 
     if not donnees.get("heure_iso"):
-        return False, "Pas de date/heure exacte disponible (heure_iso manquant)"
+        return False, "Pas de date/heure exacte disponible (heure_iso manquant)", None
 
     try:
         debut_dt = datetime.fromisoformat(donnees["heure_iso"])
     except ValueError as e:
-        return False, f"Date/heure invalide ({donnees['heure_iso']}) : {e}"
+        return False, f"Date/heure invalide ({donnees['heure_iso']}) : {e}", None
 
     fin_dt = debut_dt + timedelta(hours=1)
     type_label = "MEDICAL" if donnees.get("type") == "medical" else "PRIVE"
@@ -293,15 +368,17 @@ def creer_evenement_agenda(donnees: dict, numero_expediteur: str = "") -> tuple[
     # envoye le SMS -- c'est le seul moyen de le recontacter dans ce cas.
     telephone = donnees.get("telephone") or numero_expediteur or "(non renseigne)"
     heure_aff = debut_dt.strftime("%Hh%M")
+    reference = reference or generer_reference()
 
     titre = (
         f"PC {heure_aff} M. {donnees['nom']} | "
         f"PC : {donnees['prise_en_charge']} | "
         f"DEST : {donnees['destination']} | "
         f"RDV : {heure_aff} {type_tag} | "
-        f"TEL : {telephone}"
+        f"TEL : {telephone} | REF : {reference}"
     ).upper()
     description = (
+        f"REF : {reference}\n"
         f"PC : {donnees['prise_en_charge']}\n"
         f"DEST : {donnees['destination']}\n"
         f"RDV : {heure_aff} {type_tag}\n"
@@ -309,11 +386,7 @@ def creer_evenement_agenda(donnees: dict, numero_expediteur: str = "") -> tuple[
     ).upper()
 
     try:
-        infos_compte = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
-        creds = service_account.Credentials.from_service_account_info(
-            infos_compte, scopes=["https://www.googleapis.com/auth/calendar"]
-        )
-        service = build("calendar", "v3", credentials=creds)
+        service = _construire_service_agenda()
         evenement = {
             "summary": titre,
             "description": description,
@@ -328,7 +401,19 @@ def creer_evenement_agenda(donnees: dict, numero_expediteur: str = "") -> tuple[
             .insert(calendarId=GOOGLE_CALENDAR_ID, body=evenement)
             .execute()
         )
-        return True, resultat.get("htmlLink", "evenement cree")
+        return True, resultat.get("htmlLink", "evenement cree"), resultat.get("id")
+    except Exception as e:
+        return False, str(e), None
+
+
+def supprimer_evenement_agenda(event_id: str) -> tuple[bool, str]:
+    """Supprime un evenement de Google Agenda a partir de son ID."""
+    if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
+        return False, "Google Agenda non configure (variables manquantes sur Railway)"
+    try:
+        service = _construire_service_agenda()
+        service.events().delete(calendarId=GOOGLE_CALENDAR_ID, eventId=event_id).execute()
+        return True, "evenement supprime"
     except Exception as e:
         return False, str(e)
 
@@ -407,8 +492,67 @@ def webhook_sms():
             log.info("Extraction IA (avec contexte) : %s", donnees_extraites)
             est_question = donnees_extraites.pop("est_question", False)
             plusieurs_courses = donnees_extraites.pop("plusieurs_courses", False)
+            annulation = donnees_extraites.pop("annulation", False)
 
-            if plusieurs_courses:
+            if annulation:
+                # Le client demande d'annuler une reservation.
+                reference_citee = (donnees_extraites.get("reference_annulation") or "").strip().upper()
+
+                if reference_citee:
+                    # Le client a cite un code precis -> on cherche cet
+                    # evenement precis dans Google Agenda.
+                    evenements = rechercher_evenements(reference_citee, seulement_futur=False)
+                    evenements = [
+                        e for e in evenements
+                        if extraire_reference_de_description(e.get("description", "")) == reference_citee
+                    ]
+                    if len(evenements) == 1:
+                        succes, detail = supprimer_evenement_agenda(evenements[0]["id"])
+                        if succes:
+                            texte_reponse = f"Votre reservation (Ref: {reference_citee}) a bien ete annulee."
+                        else:
+                            log.error("Echec suppression evenement (ref %s) : %s", reference_citee, detail)
+                            texte_reponse = "Erreur technique lors de l'annulation, merci de nous rappeler directement."
+                        if entree_existante and entree_existante.get("reference") == reference_citee:
+                            MEMOIRE_RESERVATIONS.pop(expediteur, None)
+                    else:
+                        texte_reponse = (
+                            f"Reference {reference_citee} introuvable. "
+                            "Verifiez le code Ref recu par SMS lors de la confirmation."
+                        )
+                else:
+                    # Pas de code cite -> on cherche toutes les reservations
+                    # futures liees a ce numero de telephone dans l'agenda.
+                    evenements = rechercher_evenements(expediteur, seulement_futur=True)
+                    if not evenements:
+                        texte_reponse = "Nous n'avons pas de reservation en cours a annuler pour ce numero."
+                    elif len(evenements) == 1:
+                        ref_trouvee = extraire_reference_de_description(evenements[0].get("description", ""))
+                        succes, detail = supprimer_evenement_agenda(evenements[0]["id"])
+                        if succes:
+                            texte_reponse = "Votre reservation a bien ete annulee. N'hesitez pas a nous recontacter si besoin."
+                        else:
+                            log.error("Echec suppression evenement pour %s : %s", expediteur, detail)
+                            texte_reponse = "Erreur technique lors de l'annulation, merci de nous rappeler directement."
+                        MEMOIRE_RESERVATIONS.pop(expediteur, None)
+                    else:
+                        # Plusieurs reservations trouvees -> on les liste
+                        # avec leur reference pour que le client precise.
+                        lignes = []
+                        for ev in evenements[:5]:
+                            ref = extraire_reference_de_description(ev.get("description", ""))
+                            debut_iso = ev.get("start", {}).get("dateTime", "")
+                            try:
+                                date_aff = datetime.fromisoformat(debut_iso).strftime("%d/%m %Hh%M")
+                            except ValueError:
+                                date_aff = debut_iso
+                            lignes.append(f"{ref} le {date_aff}")
+                        texte_reponse = (
+                            "Vous avez plusieurs reservations : "
+                            + " ; ".join(lignes)
+                            + ". Repondez avec le code Ref de celle a annuler (ex: 'annulez ABC123')."
+                        )
+            elif plusieurs_courses:
                 # Le client decrit plusieurs trajets distincts dans le meme
                 # SMS -> on lui demande de les envoyer un par un, on ne
                 # touche pas a la memoire existante.
@@ -432,24 +576,43 @@ def webhook_sms():
                 donnees_completes = donnees_extraites
                 log.info("Donnees cumulees pour %s : %s", expediteur, donnees_completes)
 
-                texte_reponse = construire_reponse(donnees_completes)
-
                 champs_manquants = [
                     c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
                 ]
                 etait_deja_complete = bool(entree_existante and entree_existante["complete"])
                 est_complete_maintenant = not champs_manquants
+                event_id_a_conserver = None
+                reference_a_conserver = None
 
                 if est_complete_maintenant and not etait_deja_complete:
                     # Premiere fois que cette reservation est complete ->
-                    # on cree l'evenement dans Google Agenda.
-                    succes, detail = creer_evenement_agenda(donnees_completes, expediteur)
+                    # on cree l'evenement dans Google Agenda avec une
+                    # nouvelle reference.
+                    reference_a_conserver = generer_reference()
+                    succes, detail, event_id = creer_evenement_agenda(
+                        donnees_completes, expediteur, reference_a_conserver
+                    )
                     if succes:
                         log.info("Evenement Google Agenda cree pour %s : %s", expediteur, detail)
+                        event_id_a_conserver = event_id
                     else:
                         log.error("Echec creation evenement Agenda pour %s : %s", expediteur, detail)
+                        reference_a_conserver = None
+                elif etait_deja_complete:
+                    # Reservation deja complete auparavant (ex: correction
+                    # mineure apres coup) -> on garde l'event_id/reference
+                    # existants.
+                    event_id_a_conserver = entree_existante.get("event_id")
+                    reference_a_conserver = entree_existante.get("reference")
 
-                sauvegarder_entree(expediteur, donnees_completes, complete=est_complete_maintenant)
+                texte_reponse = construire_reponse(
+                    donnees_completes, reference_a_conserver if est_complete_maintenant else ""
+                )
+
+                sauvegarder_entree(
+                    expediteur, donnees_completes, complete=est_complete_maintenant,
+                    event_id=event_id_a_conserver, reference=reference_a_conserver,
+                )
 
         envoyer_sms(expediteur, texte_reponse)
 
@@ -577,7 +740,7 @@ def tester_agenda():
         "heure": "test",
         "heure_iso": demain.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(),
     }
-    succes, detail = creer_evenement_agenda(donnees_test)
+    succes, detail, _event_id = creer_evenement_agenda(donnees_test)
     if succes:
         return f"Evenement de test cree avec succes !<br><br>Lien : {detail}", 200
     return f"Echec de la creation de l'evenement de test :<br><br>{detail}", 200
