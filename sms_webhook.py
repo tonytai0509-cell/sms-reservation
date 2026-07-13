@@ -22,6 +22,7 @@ import hmac
 import json
 import logging
 import os
+import time
 
 import requests
 from flask import Flask, request, jsonify
@@ -64,6 +65,46 @@ CHAMPS_OBLIGATOIRES = {
     "destination": "la destination",
     "heure": "l'heure de prise en charge",
 }
+
+# Memoire des reservations en cours de completion, par numero de telephone.
+# Format : { "+336...": {"donnees": {...}, "derniere_maj": timestamp_unix} }
+# Simple dictionnaire en RAM : suffisant pour ce volume, se vide si le
+# service redemarre (acceptable, les clients recevront juste une nouvelle
+# demande de precisions dans ce cas rare).
+MEMOIRE_RESERVATIONS: dict[str, dict] = {}
+DUREE_EXPIRATION_SECONDES = 60 * 60  # 1 heure
+
+
+def recuperer_donnees_en_cours(numero: str) -> dict:
+    """Renvoie les infos deja connues pour ce numero si elles n'ont pas
+    expire (plus d'1h sans nouveau message), sinon un dict vide."""
+    entree = MEMOIRE_RESERVATIONS.get(numero)
+    if entree is None:
+        return {}
+    if time.time() - entree["derniere_maj"] > DUREE_EXPIRATION_SECONDES:
+        MEMOIRE_RESERVATIONS.pop(numero, None)
+        return {}
+    return entree["donnees"]
+
+
+def fusionner(anciennes: dict, nouvelles: dict) -> dict:
+    """Combine les infos deja connues avec les nouvelles infos extraites du
+    dernier SMS. Les nouvelles valeurs (non nulles) remplacent les
+    anciennes ; les champs absents du nouveau message gardent leur ancienne
+    valeur."""
+    fusion = dict(anciennes)
+    for champ, valeur in nouvelles.items():
+        if valeur:
+            fusion[champ] = valeur
+    return fusion
+
+
+def sauvegarder_donnees_en_cours(numero: str, donnees: dict) -> None:
+    MEMOIRE_RESERVATIONS[numero] = {"donnees": donnees, "derniere_maj": time.time()}
+
+
+def effacer_donnees_en_cours(numero: str) -> None:
+    MEMOIRE_RESERVATIONS.pop(numero, None)
 
 
 def extraire_reservation(message: str) -> dict | None:
@@ -214,8 +255,21 @@ def webhook_sms():
                 "Un chauffeur vous recontactera pour confirmer."
             )
         else:
-            log.info("Extraction IA : %s", donnees_extraites)
-            texte_reponse = construire_reponse(donnees_extraites)
+            log.info("Extraction IA (ce message) : %s", donnees_extraites)
+            donnees_precedentes = recuperer_donnees_en_cours(expediteur)
+            donnees_completes = fusionner(donnees_precedentes, donnees_extraites)
+            log.info("Donnees cumulees pour %s : %s", expediteur, donnees_completes)
+
+            texte_reponse = construire_reponse(donnees_completes)
+
+            champs_manquants = [
+                c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
+            ]
+            if champs_manquants:
+                sauvegarder_donnees_en_cours(expediteur, donnees_completes)
+            else:
+                effacer_donnees_en_cours(expediteur)
+
         envoyer_sms(expediteur, texte_reponse)
 
     return jsonify({"status": "ok"}), 200
