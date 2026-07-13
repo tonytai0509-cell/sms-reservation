@@ -20,6 +20,8 @@ Variables d'environnement necessaires (a mettre sur Railway) :
   GOOGLE_MAPS_API_KEY         -> cle API Google Maps (Distance Matrix), pour estimer les temps de trajet
   RESEND_API_KEY              -> cle API Resend (resend.com), pour l'envoi d'email (HTTPS, pas de SMTP bloque)
   EMAIL_DESTINATAIRE          -> adresse email qui recoit les confirmations (ex: tony.tai0509@gmail.com)
+  DOSSIER_DONNEES             -> (optionnel) dossier de stockage persistant pour la memoire des
+                                  reservations en cours (defaut: /data, prevu pour un Volume Railway)
 """
 
 import hashlib
@@ -56,6 +58,17 @@ GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 FUSEAU_HORAIRE = ZoneInfo("Europe/Paris")
+
+# Dossier de stockage persistant (Volume Railway monte sur /data). Si le
+# volume n'existe pas (ex: en local), on retombe sur le dossier courant
+# pour ne jamais planter au demarrage.
+DOSSIER_DONNEES = os.environ.get("DOSSIER_DONNEES", "/data")
+if not os.path.isdir(DOSSIER_DONNEES):
+    try:
+        os.makedirs(DOSSIER_DONNEES, exist_ok=True)
+    except OSError:
+        DOSSIER_DONNEES = "."
+FICHIER_MEMOIRE_RESERVATIONS = os.path.join(DOSSIER_DONNEES, "memoire_reservations.json")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 EMAIL_DESTINATAIRE = os.environ.get("EMAIL_DESTINATAIRE", "")
@@ -192,8 +205,10 @@ CHAMPS_OBLIGATOIRES = {
 # ("a quelle heure ?") sans tout redemander, et de fusionner les infos
 # entre plusieurs SMS d'une meme demande.
 # Format : { "+336...": {"donnees": {...}, "derniere_maj": ts, "complete": bool} }
-# Simple dictionnaire en RAM : suffisant pour ce volume, se vide si le
-# service redemarre (acceptable, cas rare).
+# Dictionnaire en RAM, mais persiste sur disque (voir
+# charger_memoire_reservations / persister_memoire_reservations) dans
+# DOSSIER_DONNEES (Volume Railway monte sur /data) pour survivre a un
+# redemarrage du service (deploiement, crash, etc.).
 MEMOIRE_RESERVATIONS: dict[str, dict] = {}
 DUREE_EXPIRATION_SECONDES = 60 * 60  # 1 heure
 
@@ -210,6 +225,42 @@ DUREE_ATTENTE_ANNULATION_SECONDES = 15 * 60  # 15 minutes
 MAX_RESERVATIONS_ACTIVES = 5
 
 
+def charger_memoire_reservations() -> None:
+    """Recharge MEMOIRE_RESERVATIONS depuis le fichier JSON persistant au
+    demarrage du service, pour ne pas perdre les reservations en cours de
+    saisie en cas de redemarrage (deploiement, crash, etc.)."""
+    if not os.path.isfile(FICHIER_MEMOIRE_RESERVATIONS):
+        return
+    try:
+        with open(FICHIER_MEMOIRE_RESERVATIONS, "r", encoding="utf-8") as f:
+            donnees_disque = json.load(f)
+        maintenant = time.time()
+        for numero, entree in donnees_disque.items():
+            # On ignore les entrees deja expirees pour ne pas les recharger
+            # inutilement (redemande une reservation perimee).
+            if maintenant - entree.get("derniere_maj", 0) <= DUREE_EXPIRATION_SECONDES:
+                MEMOIRE_RESERVATIONS[numero] = entree
+        log.info(
+            "Memoire des reservations rechargee depuis %s (%d entrees actives)",
+            FICHIER_MEMOIRE_RESERVATIONS, len(MEMOIRE_RESERVATIONS),
+        )
+    except (OSError, json.JSONDecodeError) as e:
+        log.error("Echec du rechargement de la memoire des reservations : %s", e)
+
+
+def persister_memoire_reservations() -> None:
+    """Ecrit MEMOIRE_RESERVATIONS sur disque. Appele apres chaque
+    modification pour survivre a un redemarrage du service."""
+    try:
+        with open(FICHIER_MEMOIRE_RESERVATIONS, "w", encoding="utf-8") as f:
+            json.dump(MEMOIRE_RESERVATIONS, f, ensure_ascii=False)
+    except OSError as e:
+        log.error("Echec de la sauvegarde de la memoire des reservations : %s", e)
+
+
+charger_memoire_reservations()
+
+
 def recuperer_entree(numero: str) -> dict | None:
     """Renvoie l'entree memorisee pour ce numero (donnees + statut complete)
     si elle n'a pas expire (plus d'1h sans nouveau message), sinon None."""
@@ -218,6 +269,7 @@ def recuperer_entree(numero: str) -> dict | None:
         return None
     if time.time() - entree["derniere_maj"] > DUREE_EXPIRATION_SECONDES:
         MEMOIRE_RESERVATIONS.pop(numero, None)
+        persister_memoire_reservations()
         return None
     return entree
 
@@ -240,6 +292,7 @@ def sauvegarder_entree(
         "event_id": event_id if event_id is not None else ancienne.get("event_id"),
         "reference": reference if reference is not None else ancienne.get("reference"),
     }
+    persister_memoire_reservations()
 
 
 def extraire_reservation(message: str, connu: dict | None = None) -> dict | None:
@@ -724,6 +777,7 @@ def webhook_sms():
                             texte_reponse = "Erreur technique lors de l'annulation, merci de nous rappeler directement."
                         if entree_existante and entree_existante.get("reference") == reference_citee:
                             MEMOIRE_RESERVATIONS.pop(expediteur, None)
+                            persister_memoire_reservations()
                     else:
                         texte_reponse = (
                             f"Reference {reference_citee} introuvable. "
@@ -744,6 +798,7 @@ def webhook_sms():
                             log.error("Echec suppression evenement pour %s : %s", expediteur, detail)
                             texte_reponse = "Erreur technique lors de l'annulation, merci de nous rappeler directement."
                         MEMOIRE_RESERVATIONS.pop(expediteur, None)
+                        persister_memoire_reservations()
                     else:
                         # Plusieurs reservations trouvees -> on les liste
                         # avec leur reference, et on memorise les options
