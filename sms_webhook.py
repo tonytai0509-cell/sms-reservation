@@ -103,8 +103,15 @@ Champs :
   nom clairement identifiable, garde le nom deja connu (ne le remplace pas
   par un mot d'adresse).
 - telephone : numero de contact different de l'expediteur, si mentionne.
-- prise_en_charge : adresse ou lieu de depart complet (numero + nom de rue).
-- destination : adresse ou lieu d'arrivee.
+- prise_en_charge : adresse PRECISE et exploitable par un chauffeur (numero
+  + nom de rue, ou un lieu nomme reconnaissable comme un hopital/gare/
+  aeroport). IMPORTANT : des termes vagues comme "mon domicile", "chez moi",
+  "ma maison", "mon adresse habituelle" NE SONT PAS des adresses valides
+  tant qu'aucune adresse concrete n'est donnee avec -> laisse ce champ null
+  dans ce cas (il faudra la demander explicitement au client), meme si le
+  message semble par ailleurs complet.
+- destination : meme regle que prise_en_charge -- doit etre une adresse ou
+  un lieu precis, pas une reference vague.
 - heure_rdv : heure du rendez-vous/consultation/evenement lui-meme, si le
   client la mentionne (ex: "j'ai rendez-vous a 12h", "consultation a 14h").
   C'est une info indicative, PAS l'heure a laquelle le chauffeur doit venir.
@@ -942,4 +949,3 @@ def tester_email():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
-
