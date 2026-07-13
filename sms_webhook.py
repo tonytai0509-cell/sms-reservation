@@ -78,6 +78,10 @@ Champs :
   - Polyclinique Santa Maria
   - Clinique Saint-Francois
   - Hopital Cimiez
+  - Polyclinique Saint Jean (Cagnes-sur-Mer) -- "Saint-Jean" ou "St Jean"
+    mentionne seul (sans le mot "polyclinique") compte AUSSI comme medical,
+    meme si le nom existe egalement comme quartier residentiel (Saint-Jean
+    Cap-Ferrat) : dans le doute, priviligier medical pour ce nom precis.
   - Institut Arnault Tzanck / Tzanck / CRC Nice
   Sinon (adresse residentielle, aeroport, gare, restaurant, etc.) -> prive.
 - nom : nom de famille du client. Ne provient JAMAIS d'un mot comme "avenue",
@@ -109,17 +113,27 @@ Champs :
   "merci") qui n'apporte AUCUNE nouvelle info de reservation exploitable
   (au dela de repeter une info deja connue) ; false s'il apporte une info
   nouvelle ou modifiee.
+- plusieurs_courses : true si le nouveau message decrit CLAIREMENT plusieurs
+  trajets/courses distincts avec des destinations et/ou heures differentes
+  (ex: "aller a X a 14h puis a Y a 15h"). false sinon (un seul trajet).
 
 Regles generales :
 - Un champ deja connu ne doit JAMAIS etre efface ou remplace par une valeur
   moins precise ou hors-sujet. Il n'est remplace que si le nouveau message
   apporte clairement une correction ou precision sur ce champ precis.
 - Les champs jamais renseignes restent a null.
+- EXCEPTION IMPORTANTE : si le nouveau message mentionne un nom de famille
+  clairement DIFFERENT de celui deja connu, c'est un NOUVEAU client (le
+  numero de telephone est peut-etre partage/reutilise). Dans ce cas,
+  IGNORE COMPLETEMENT les anciennes valeurs de prise_en_charge,
+  destination, heure_rdv et heure (meme si elles etaient renseignees) :
+  ne les reprends que si le nouveau message les mentionne lui-meme a
+  nouveau. Seul le nouveau nom est utilise, tout le reste redemarre a zero.
 
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "heure_iso": ..., "est_question": true/false}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false}
 """
 
 CHAMPS_OBLIGATOIRES = {
@@ -258,7 +272,7 @@ def construire_reponse(donnees: dict) -> str:
     )
 
 
-def creer_evenement_agenda(donnees: dict) -> tuple[bool, str]:
+def creer_evenement_agenda(donnees: dict, numero_expediteur: str = "") -> tuple[bool, str]:
     """Cree l'evenement correspondant dans Google Agenda via un compte de
     service. Renvoie (succes, message_ou_lien)."""
     if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
@@ -272,8 +286,21 @@ def creer_evenement_agenda(donnees: dict) -> tuple[bool, str]:
     except ValueError as e:
         return False, f"Date/heure invalide ({donnees['heure_iso']}) : {e}"
 
-    fin_dt = debut_dt + timedelta(minutes=30)
+    fin_dt = debut_dt + timedelta(hours=1)
     type_label = "MEDICAL" if donnees.get("type") == "medical" else "PRIVE"
+    type_tag = "[MED]" if type_label == "MEDICAL" else "[PRIVE]"
+    # Si le client n'a pas donne un numero different, on utilise celui qui a
+    # envoye le SMS -- c'est le seul moyen de le recontacter dans ce cas.
+    telephone = donnees.get("telephone") or numero_expediteur or "(non renseigne)"
+    heure_aff = debut_dt.strftime("%Hh%M")
+
+    titre = f"PC {heure_aff} M. {donnees['nom']}".upper()
+    description = (
+        f"PC : {donnees['prise_en_charge']}\n"
+        f"DEST : {donnees['destination']}\n"
+        f"RDV : {heure_aff} {type_tag}\n"
+        f"TEL : {telephone}"
+    ).upper()
 
     try:
         infos_compte = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
@@ -282,14 +309,13 @@ def creer_evenement_agenda(donnees: dict) -> tuple[bool, str]:
         )
         service = build("calendar", "v3", credentials=creds)
         evenement = {
-            "summary": f"[{type_label}] {donnees['nom']} - {donnees['prise_en_charge']} -> {donnees['destination']}",
-            "description": (
-                f"Reservation recue par SMS.\n"
-                f"Telephone : {donnees.get('telephone') or '(voir SMS)'}\n"
-                f"Type : {type_label}"
-            ),
+            "summary": titre,
+            "description": description,
             "start": {"dateTime": debut_dt.isoformat(), "timeZone": "Europe/Paris"},
             "end": {"dateTime": fin_dt.isoformat(), "timeZone": "Europe/Paris"},
+            # colorId 5 = "Banana" (jaune) dans la palette Google Agenda,
+            # pour distinguer d'un coup d'oeil les reservations venues du SMS.
+            "colorId": "5",
         }
         resultat = (
             service.events()
@@ -374,8 +400,19 @@ def webhook_sms():
         else:
             log.info("Extraction IA (avec contexte) : %s", donnees_extraites)
             est_question = donnees_extraites.pop("est_question", False)
+            plusieurs_courses = donnees_extraites.pop("plusieurs_courses", False)
 
-            if est_question and entree_existante:
+            if plusieurs_courses:
+                # Le client decrit plusieurs trajets distincts dans le meme
+                # SMS -> on lui demande de les envoyer un par un, on ne
+                # touche pas a la memoire existante.
+                log.info("Demande multi-courses detectee pour %s", expediteur)
+                texte_reponse = (
+                    "Merci de nous envoyer une seule course a la fois : "
+                    "un SMS par trajet (depart, destination, heure). "
+                    "Renvoyez-nous d'abord la premiere course."
+                )
+            elif est_question and entree_existante:
                 # Le SMS est une question/remarque de suivi (ex: "a quelle
                 # heure venez-vous ?"), pas une nouvelle info -> on rappelle
                 # la reservation en cours plutot que de la modifier.
@@ -400,7 +437,7 @@ def webhook_sms():
                 if est_complete_maintenant and not etait_deja_complete:
                     # Premiere fois que cette reservation est complete ->
                     # on cree l'evenement dans Google Agenda.
-                    succes, detail = creer_evenement_agenda(donnees_completes)
+                    succes, detail = creer_evenement_agenda(donnees_completes, expediteur)
                     if succes:
                         log.info("Evenement Google Agenda cree pour %s : %s", expediteur, detail)
                     else:
