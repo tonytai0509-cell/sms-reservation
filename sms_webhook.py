@@ -1006,6 +1006,39 @@ def webhook_sms():
     return jsonify({"status": "ok"}), 200
 
 
+@app.route("/admin/reinitialiser-numero", methods=["GET"])
+def reinitialiser_numero():
+    """Vide la memoire (reservation en cours + attente d'annulation) pour un
+    numero donne, pour repartir de zero sur un scenario de test sans
+    attendre l'expiration naturelle (1h). Usage :
+    /admin/reinitialiser-numero?numero=0624125779 (accepte le format
+    francais local 06... ou le format international +336...)."""
+    numero_brut = request.args.get("numero", "").strip()
+    if not numero_brut:
+        return jsonify({"erreur": "Merci de fournir ?numero=0612345678 dans l'URL."}), 400
+
+    # Normalisation basique du format francais local -> international,
+    # pour matcher le format utilise par SMS Gateway (+336...).
+    numero = numero_brut
+    if numero.startswith("0") and len(numero) == 10:
+        numero = "+33" + numero[1:]
+    elif not numero.startswith("+"):
+        numero = "+" + numero
+
+    existait_reservation = numero in MEMOIRE_RESERVATIONS
+    existait_attente = numero in MEMOIRE_ANNULATION_EN_ATTENTE
+    MEMOIRE_RESERVATIONS.pop(numero, None)
+    MEMOIRE_ANNULATION_EN_ATTENTE.pop(numero, None)
+    persister_memoire_reservations()
+
+    return jsonify({
+        "numero_normalise": numero,
+        "reservation_effacee": existait_reservation,
+        "attente_annulation_effacee": existait_attente,
+        "message": f"Memoire reinitialisee pour {numero}. Tu peux recommencer un test comme un nouveau client.",
+    }), 200
+
+
 @app.route("/admin/verifier-memoire", methods=["GET"])
 def verifier_memoire():
     """Affiche l'etat de la memoire des reservations en cours, et confirme
