@@ -59,8 +59,27 @@ combinant intelligemment les infos deja connues avec ce que le nouveau
 message apporte.
 
 Champs :
-- type : "prive" ou "medical". Medical si mention d'un hopital, clinique, CHU,
-  service medical (ex: "neurologie", "dialyse"), medecin, etc. Sinon prive.
+- type : "prive" ou "medical". Medical si mention d'un hopital, clinique,
+  CHU, service medical (ex: "neurologie", "dialyse"), medecin, consultation,
+  etc. Medical AUSSI si le lieu de destination ou de prise en charge
+  correspond a l'un de ces etablissements de sante de la region de Nice
+  (reconnais-les meme mal orthographies, abreges, ou sans le mot
+  "hopital"/"clinique" devant) :
+  - Hopital Les Sources
+  - Clinique Saint George / Saint-George
+  - Hopital Pasteur (Pasteur 1, Pasteur 2)
+  - Hopital L'Archet / Archet (Archet 1, Archet 2)
+  - Hopitaux Pediatriques de Nice / Fondation Lenval / Lenval
+  - Centre Antoine Lacassagne
+  - Centre medical et dentaire MGEN
+  - Centre Medical Pierre Sola
+  - Clinique du Parc Imperial
+  - Clinique Saint-Antoine
+  - Polyclinique Santa Maria
+  - Clinique Saint-Francois
+  - Hopital Cimiez
+  - Institut Arnault Tzanck / Tzanck / CRC Nice
+  Sinon (adresse residentielle, aeroport, gare, restaurant, etc.) -> prive.
 - nom : nom de famille du client. Ne provient JAMAIS d'un mot comme "avenue",
   "rue", "boulevard", "chemin", "allee", "impasse" -- ce sont des adresses,
   pas des noms. Un nom apparait typiquement apres "je suis", "M.", "Mme",
