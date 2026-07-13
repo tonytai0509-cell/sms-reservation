@@ -1,20 +1,22 @@
 """
 sms_webhook.py
 
-Etape 2 : reception d'un SMS + extraction IA (Claude Haiku) des infos de
+Etape 3 : reception d'un SMS + extraction IA (Claude Haiku) des infos de
 reservation (type prive/medical, nom, telephone, prise en charge,
-destination, heure) + reponse automatique adaptee.
-Pas encore de Google Agenda - ca sera la prochaine etape.
+destination, heure) + reponse automatique adaptee + creation automatique
+de l'evenement dans Google Agenda.
 
 Fonctionne avec l'app "SMS Gateway for Android" (docs.sms-gate.app).
 
 Variables d'environnement necessaires (a mettre sur Railway) :
-  SMS_GATEWAY_SIGNING_KEY   -> cle de signature webhook (app > Parametres > Webhooks)
-  SMS_GATEWAY_USERNAME      -> identifiant Cloud/Local de l'app
-  SMS_GATEWAY_PASSWORD      -> mot de passe Cloud/Local de l'app
-  SMS_GATEWAY_MODE          -> "cloud" ou "local" (defaut: cloud)
-  SMS_GATEWAY_LOCAL_URL     -> uniquement si mode local (ex: https://192.168.1.10:8080)
-  ANTHROPIC_API_KEY         -> cle API Anthropic (console.anthropic.com), pour l'extraction IA
+  SMS_GATEWAY_SIGNING_KEY     -> cle de signature webhook (app > Parametres > Webhooks)
+  SMS_GATEWAY_USERNAME        -> identifiant Cloud/Local de l'app
+  SMS_GATEWAY_PASSWORD        -> mot de passe Cloud/Local de l'app
+  SMS_GATEWAY_MODE            -> "cloud" ou "local" (defaut: cloud)
+  SMS_GATEWAY_LOCAL_URL       -> uniquement si mode local (ex: https://192.168.1.10:8080)
+  ANTHROPIC_API_KEY           -> cle API Anthropic (console.anthropic.com), pour l'extraction IA
+  GOOGLE_SERVICE_ACCOUNT_JSON -> contenu JSON complet de la cle du compte de service Google
+  GOOGLE_CALENDAR_ID          -> adresse email du calendrier Google a utiliser (souvent ton email)
 """
 
 import hashlib
@@ -23,9 +25,13 @@ import json
 import logging
 import os
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import requests
 from flask import Flask, request, jsonify
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +45,10 @@ LOCAL_URL = os.environ.get("SMS_GATEWAY_LOCAL_URL", "")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+
+GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
+FUSEAU_HORAIRE = ZoneInfo("Europe/Paris")
 
 PROMPT_SYSTEME = """Tu geres une conversation SMS avec un client qui reserve un taxi.
 Tu recois : les informations DEJA CONNUES sur sa reservation (peuvent etre
@@ -71,6 +81,10 @@ Champs :
   reste null (ce n'est pas la meme chose que heure_rdv) -- il faudra la lui
   demander explicitement. Une date seule sans heure chiffree (ex: juste
   "demain") NE COMPTE PAS non plus comme une heure valide.
+- heure_iso : UNIQUEMENT si le champ "heure" ci-dessus est rempli, la meme
+  date et heure de prise en charge au format exact "AAAA-MM-JJTHH:MM:00"
+  (ex: "2026-07-14T08:30:00"), calculee a partir de la date et heure
+  actuelles donnees plus bas. Sinon null.
 - est_question : true si le nouveau message est une question ou une
   remarque du client (ex: "a quelle heure venez-vous ?", "c'est confirme ?",
   "merci") qui n'apporte AUCUNE nouvelle info de reservation exploitable
@@ -86,7 +100,7 @@ Regles generales :
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "est_question": true/false}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "heure_iso": ..., "est_question": true/false}
 """
 
 CHAMPS_OBLIGATOIRES = {
@@ -136,7 +150,10 @@ def extraire_reservation(message: str, connu: dict | None = None) -> dict | None
         log.warning("ANTHROPIC_API_KEY non configuree - extraction IA impossible")
         return None
 
+    maintenant = datetime.now(FUSEAU_HORAIRE)
     contenu_utilisateur = (
+        f"Date et heure actuelles (Nice, France) : "
+        f"{maintenant.strftime('%A %d %B %Y, %H:%M')}\n\n"
         f"Informations deja connues sur cette reservation : "
         f"{json.dumps(connu or {}, ensure_ascii=False)}\n\n"
         f"Nouveau message du client : {message}"
@@ -220,6 +237,49 @@ def construire_reponse(donnees: dict) -> str:
         f"au {depart}, direction {destination}. "
         "Un chauffeur vous contactera peu avant son arrivee."
     )
+
+
+def creer_evenement_agenda(donnees: dict) -> tuple[bool, str]:
+    """Cree l'evenement correspondant dans Google Agenda via un compte de
+    service. Renvoie (succes, message_ou_lien)."""
+    if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
+        return False, "Google Agenda non configure (variables manquantes sur Railway)"
+
+    if not donnees.get("heure_iso"):
+        return False, "Pas de date/heure exacte disponible (heure_iso manquant)"
+
+    try:
+        debut_dt = datetime.fromisoformat(donnees["heure_iso"])
+    except ValueError as e:
+        return False, f"Date/heure invalide ({donnees['heure_iso']}) : {e}"
+
+    fin_dt = debut_dt + timedelta(minutes=30)
+    type_label = "MEDICAL" if donnees.get("type") == "medical" else "PRIVE"
+
+    try:
+        infos_compte = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+        creds = service_account.Credentials.from_service_account_info(
+            infos_compte, scopes=["https://www.googleapis.com/auth/calendar"]
+        )
+        service = build("calendar", "v3", credentials=creds)
+        evenement = {
+            "summary": f"[{type_label}] {donnees['nom']} - {donnees['prise_en_charge']} -> {donnees['destination']}",
+            "description": (
+                f"Reservation recue par SMS.\n"
+                f"Telephone : {donnees.get('telephone') or '(voir SMS)'}\n"
+                f"Type : {type_label}"
+            ),
+            "start": {"dateTime": debut_dt.isoformat(), "timeZone": "Europe/Paris"},
+            "end": {"dateTime": fin_dt.isoformat(), "timeZone": "Europe/Paris"},
+        }
+        resultat = (
+            service.events()
+            .insert(calendarId=GOOGLE_CALENDAR_ID, body=evenement)
+            .execute()
+        )
+        return True, resultat.get("htmlLink", "evenement cree")
+    except Exception as e:
+        return False, str(e)
 
 
 if GATEWAY_MODE == "local":
@@ -315,7 +375,19 @@ def webhook_sms():
                 champs_manquants = [
                     c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
                 ]
-                sauvegarder_entree(expediteur, donnees_completes, complete=not champs_manquants)
+                etait_deja_complete = bool(entree_existante and entree_existante["complete"])
+                est_complete_maintenant = not champs_manquants
+
+                if est_complete_maintenant and not etait_deja_complete:
+                    # Premiere fois que cette reservation est complete ->
+                    # on cree l'evenement dans Google Agenda.
+                    succes, detail = creer_evenement_agenda(donnees_completes)
+                    if succes:
+                        log.info("Evenement Google Agenda cree pour %s : %s", expediteur, detail)
+                    else:
+                        log.error("Echec creation evenement Agenda pour %s : %s", expediteur, detail)
+
+                sauvegarder_entree(expediteur, donnees_completes, complete=est_complete_maintenant)
 
         envoyer_sms(expediteur, texte_reponse)
 
@@ -426,6 +498,27 @@ def verifier_cle_ia():
         f"Statut HTTP recu d'Anthropic : {reponse.status_code}<br><br>"
         f"Corps de la reponse (brut) :<br>{reponse.text[:1500]}"
     ), 200
+
+
+@app.route("/admin/tester-agenda", methods=["GET"])
+def tester_agenda():
+    """Cree un evenement de test dans Google Agenda pour verifier que la
+    configuration (compte de service + calendrier partage) fonctionne,
+    sans avoir besoin d'envoyer un SMS."""
+    demain = datetime.now(FUSEAU_HORAIRE) + timedelta(days=1)
+    donnees_test = {
+        "type": "prive",
+        "nom": "Test EasyTaxi",
+        "telephone": "0600000000",
+        "prise_en_charge": "1 rue de Test",
+        "destination": "Aeroport",
+        "heure": "test",
+        "heure_iso": demain.replace(hour=9, minute=0, second=0, microsecond=0).isoformat(),
+    }
+    succes, detail = creer_evenement_agenda(donnees_test)
+    if succes:
+        return f"Evenement de test cree avec succes !<br><br>Lien : {detail}", 200
+    return f"Echec de la creation de l'evenement de test :<br><br>{detail}", 200
 
 
 if __name__ == "__main__":
