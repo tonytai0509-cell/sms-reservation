@@ -773,6 +773,18 @@ def webhook_sms():
             confirmation_existante = donnees_extraites.pop("confirmation_existante", False)
             reference_lookup = (donnees_extraites.pop("reference_lookup", None) or "").strip().upper()
 
+            # Garde-fou : l'IA marque parfois est_question=true alors que le
+            # message apporte quand meme de nouvelles infos exploitables
+            # (ex: "je suis M. X, adresse Y, rdv a Zh, vous partez a quelle
+            # heure ?"). On ne prend le raccourci "juste une question" que
+            # si aucun champ nouveau n'a ete apporte par rapport a ce qu'on
+            # savait deja -- sinon on traite l'info normalement malgre le
+            # tour de phrase interrogatif.
+            apporte_info_nouvelle = any(
+                valeur and donnees_extraites.get(champ) != donnees_existantes.get(champ)
+                for champ, valeur in donnees_extraites.items()
+            )
+
             if annulation:
                 # Le client demande d'annuler une reservation.
                 reference_citee = (donnees_extraites.get("reference_annulation") or "").strip().upper()
@@ -883,7 +895,7 @@ def webhook_sms():
                     "un SMS par trajet (depart, destination, heure). "
                     "Renvoyez-nous d'abord la premiere course."
                 )
-            elif est_question and entree_existante:
+            elif est_question and entree_existante and not apporte_info_nouvelle:
                 # Le SMS est une question/remarque de suivi (ex: "a quelle
                 # heure venez-vous ?"), pas une nouvelle info -> on rappelle
                 # la reservation en cours plutot que de la modifier.
