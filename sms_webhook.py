@@ -515,7 +515,13 @@ def envoyer_email_confirmation(donnees: dict, numero_expediteur: str, reference:
     message["To"] = EMAIL_DESTINATAIRE
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as serveur:
+        # Port 587 (STARTTLS) plutot que 465 (SSL direct) : certains
+        # hebergeurs comme Railway filtrent le port 465 en sortie, ce qui
+        # bloquait la connexion indefiniment. On ajoute aussi un timeout
+        # explicite pour ne jamais faire planter le service en cas de
+        # nouveau souci reseau.
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as serveur:
+            serveur.starttls()
             serveur.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE_APP)
             serveur.send_message(message)
         return True, "email envoye"
