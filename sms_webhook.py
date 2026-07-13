@@ -111,10 +111,20 @@ Champs :
   reste null (ce n'est pas la meme chose que heure_rdv) -- il faudra la lui
   demander explicitement. Une date seule sans heure chiffree (ex: juste
   "demain") NE COMPTE PAS non plus comme une heure valide.
-- heure_iso : UNIQUEMENT si le champ "heure" ci-dessus est rempli, la meme
+- date : la date evoquee par le client (aujourd'hui, demain, apres-demain,
+  une date precise comme "le 20 juillet"), au format exact "AAAA-MM-JJ",
+  calculee a partir de la date actuelle donnee plus bas. CONTRAIREMENT a
+  heure/heure_iso, ce champ doit etre rempli DES QU'UNE DATE est evoquee,
+  MEME SI aucune heure precise n'est encore donnee (ex: "rendez-vous
+  apres-demain" sans heure -> date rempli, heure/heure_iso restent null en
+  attendant l'heure precise). Une fois rempli, il n'est JAMAIS efface --
+  garde-le meme si les messages suivants ne reparlent pas de la date, sauf
+  si le client mentionne clairement une nouvelle date differente.
+- heure_iso : UNIQUEMENT si le champ "heure" ci-dessus est rempli, la
   date et heure de prise en charge au format exact "AAAA-MM-JJTHH:MM:00"
-  (ex: "2026-07-14T08:30:00"), calculee a partir de la date et heure
-  actuelles donnees plus bas. Sinon null.
+  (ex: "2026-07-14T08:30:00"). Utilise en PRIORITE le champ "date" ci-dessus
+  (deja connu ou nouvellement mentionne) pour le jour, combine a l'heure
+  connue. Sinon null.
 - est_question : true si le nouveau message est une question ou une
   remarque du client (ex: "a quelle heure venez-vous ?", "c'est confirme ?",
   "merci") qui n'apporte AUCUNE nouvelle info de reservation exploitable
@@ -146,7 +156,7 @@ Regles generales :
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false, "annulation": true/false, "reference_annulation": ...}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "date": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false, "annulation": true/false, "reference_annulation": ...}
 """
 
 CHAMPS_OBLIGATOIRES = {
@@ -165,6 +175,18 @@ CHAMPS_OBLIGATOIRES = {
 # service redemarre (acceptable, cas rare).
 MEMOIRE_RESERVATIONS: dict[str, dict] = {}
 DUREE_EXPIRATION_SECONDES = 60 * 60  # 1 heure
+
+# Memoire courte pour le cas "plusieurs reservations trouvees lors d'une
+# annulation" : on stocke les codes Ref proposes + leur event_id, pour que
+# la reponse suivante du client (meme si c'est juste le code seul, sans le
+# mot "annuler") soit reconnue directement sans repasser par l'IA.
+# Format : { "+336...": {"options": {"REF1": "event_id1", ...}, "expire": ts} }
+MEMOIRE_ANNULATION_EN_ATTENTE: dict[str, dict] = {}
+DUREE_ATTENTE_ANNULATION_SECONDES = 15 * 60  # 15 minutes
+
+# Anti-abus : nombre maximum de reservations futures autorisees en meme
+# temps pour un seul numero de telephone.
+MAX_RESERVATIONS_ACTIVES = 5
 
 
 def recuperer_entree(numero: str) -> dict | None:
@@ -265,6 +287,20 @@ def extraire_reservation(message: str, connu: dict | None = None) -> dict | None
         return None
 
 
+def libelle_date_relative(dt: datetime) -> str:
+    """Renvoie 'aujourd'hui', 'demain', 'apres-demain' ou une date ecrite
+    (ex: 'le 20/07'), selon l'ecart avec la date du jour."""
+    aujourd_hui = datetime.now(FUSEAU_HORAIRE).date()
+    ecart = (dt.date() - aujourd_hui).days
+    if ecart == 0:
+        return "aujourd'hui"
+    if ecart == 1:
+        return "demain"
+    if ecart == 2:
+        return "apres-demain"
+    return dt.strftime("le %d/%m")
+
+
 def construire_reponse(donnees: dict, reference: str = "") -> str:
     """Construit le SMS de reponse selon que la reservation est complete ou non."""
     manquants = [
@@ -286,12 +322,24 @@ def construire_reponse(donnees: dict, reference: str = "") -> str:
         return "Merci de preciser : " + ", ".join(libelles) + "."
 
     nom = donnees["nom"]
-    heure = donnees["heure"]
     depart = donnees["prise_en_charge"]
     destination = donnees["destination"]
 
+    # On precise toujours la date (aujourd'hui/demain/apres-demain/date
+    # exacte) en plus de l'heure, pour eviter toute ambiguite -- calculee a
+    # partir de heure_iso qui contient la date exacte resolue par l'IA.
+    try:
+        debut_dt = datetime.fromisoformat(donnees["heure_iso"]) if donnees.get("heure_iso") else None
+    except ValueError:
+        debut_dt = None
+
+    if debut_dt:
+        moment = f"{libelle_date_relative(debut_dt)} a {debut_dt.strftime('%Hh%M')}"
+    else:
+        moment = donnees["heure"]
+
     reponse = (
-        f"Reservation confirmee pour M. {nom} : prise en charge {heure} "
+        f"Reservation confirmee pour M. {nom} : prise en charge {moment} "
         f"au {depart}, direction {destination}. "
         "Un chauffeur vous contactera peu avant son arrivee."
     )
@@ -476,6 +524,31 @@ def webhook_sms():
     log.info("SMS recu de %s : %s", expediteur, message)
 
     if expediteur and message:
+        # Priorite absolue : si on avait propose un choix de reservations a
+        # annuler, et que ce nouveau message correspond a l'un des codes
+        # Ref proposes (meme envoye seul, sans le mot "annuler"), on traite
+        # ca directement sans repasser par l'IA -- plus fiable.
+        attente = MEMOIRE_ANNULATION_EN_ATTENTE.get(expediteur)
+        if attente and time.time() < attente["expire"]:
+            message_normalise = message.strip().upper()
+            ref_trouvee = next(
+                (ref for ref in attente["options"] if ref in message_normalise), None
+            )
+            if ref_trouvee:
+                event_id = attente["options"][ref_trouvee]
+                succes, detail = supprimer_evenement_agenda(event_id)
+                MEMOIRE_ANNULATION_EN_ATTENTE.pop(expediteur, None)
+                if succes:
+                    texte_reponse = f"Votre reservation (Ref: {ref_trouvee}) a bien ete annulee."
+                else:
+                    log.error("Echec suppression evenement (choix ref %s) : %s", ref_trouvee, detail)
+                    texte_reponse = "Erreur technique lors de l'annulation, merci de nous rappeler directement."
+                envoyer_sms(expediteur, texte_reponse)
+                return jsonify({"status": "ok"}), 200
+            # Le message ne correspond a aucune des options proposees -> on
+            # abandonne l'attente et on traite le message normalement.
+            MEMOIRE_ANNULATION_EN_ATTENTE.pop(expediteur, None)
+
         entree_existante = recuperer_entree(expediteur)
         donnees_existantes = entree_existante["donnees"] if entree_existante else {}
 
@@ -537,16 +610,24 @@ def webhook_sms():
                         MEMOIRE_RESERVATIONS.pop(expediteur, None)
                     else:
                         # Plusieurs reservations trouvees -> on les liste
-                        # avec leur reference pour que le client precise.
+                        # avec leur reference, et on memorise les options
+                        # pour reconnaitre la reponse suivante du client
+                        # meme si elle ne contient que le code seul.
                         lignes = []
+                        options = {}
                         for ev in evenements[:5]:
                             ref = extraire_reference_de_description(ev.get("description", ""))
+                            options[ref] = ev["id"]
                             debut_iso = ev.get("start", {}).get("dateTime", "")
                             try:
                                 date_aff = datetime.fromisoformat(debut_iso).strftime("%d/%m %Hh%M")
                             except ValueError:
                                 date_aff = debut_iso
                             lignes.append(f"{ref} le {date_aff}")
+                        MEMOIRE_ANNULATION_EN_ATTENTE[expediteur] = {
+                            "options": options,
+                            "expire": time.time() + DUREE_ATTENTE_ANNULATION_SECONDES,
+                        }
                         texte_reponse = (
                             "Vous avez plusieurs reservations : "
                             + " ; ".join(lignes)
@@ -585,6 +666,16 @@ def webhook_sms():
                 reference_a_conserver = None
 
                 if est_complete_maintenant and not etait_deja_complete:
+                    # Limite anti-abus : pas plus de MAX_RESERVATIONS_ACTIVES
+                    # reservations futures en meme temps pour un numero.
+                    reservations_en_cours = rechercher_evenements(expediteur, seulement_futur=True)
+                    if len(reservations_en_cours) >= MAX_RESERVATIONS_ACTIVES:
+                        texte_reponse = (
+                            f"Vous avez deja {MAX_RESERVATIONS_ACTIVES} reservations en cours. "
+                            "Merci d'en annuler une avant d'en ajouter une nouvelle."
+                        )
+                        envoyer_sms(expediteur, texte_reponse)
+                        return jsonify({"status": "ok"}), 200
                     # Premiere fois que cette reservation est complete ->
                     # on cree l'evenement dans Google Agenda avec une
                     # nouvelle reference.
