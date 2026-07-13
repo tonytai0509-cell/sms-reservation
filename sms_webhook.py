@@ -331,7 +331,7 @@ def construire_reponse(donnees: dict, reference: str = "") -> str:
                 "A quelle heure souhaitez-vous que le chauffeur vienne vous chercher ?"
             )
         libelles = [CHAMPS_OBLIGATOIRES[c] for c in manquants]
-        return "Merci de preciser : " + ", ".join(libelles) + "."
+        return "Merci de preciser :\n" + "\n".join(f"- {libelle}" for libelle in libelles)
 
     nom = donnees["nom"]
     depart = donnees["prise_en_charge"]
