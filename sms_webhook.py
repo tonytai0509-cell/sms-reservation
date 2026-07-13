@@ -727,6 +727,14 @@ def webhook_sms():
                 MEMOIRE_ANNULATION_EN_ATTENTE.pop(expediteur, None)
                 if succes:
                     texte_reponse = f"Votre reservation (Ref: {ref_trouvee}) a bien ete annulee."
+                    # Si la reservation memorisee pour ce numero correspond a
+                    # celle qu'on vient d'annuler, on la retire de la memoire
+                    # pour eviter que le bot ne la reconfirme par erreur au
+                    # prochain message (ex: un simple "bonjour").
+                    entree_courante = recuperer_entree(expediteur)
+                    if entree_courante and entree_courante.get("reference") == ref_trouvee:
+                        MEMOIRE_RESERVATIONS.pop(expediteur, None)
+                        persister_memoire_reservations()
                 else:
                     log.error("Echec suppression evenement (choix ref %s) : %s", ref_trouvee, detail)
                     texte_reponse = "Erreur technique lors de l'annulation, merci de nous rappeler directement."
