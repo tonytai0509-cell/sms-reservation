@@ -418,6 +418,32 @@ def resoudre_adresse_medicale(adresse: str) -> str:
     return adresse
 
 
+# Villes courantes autour de Nice (+ quelques grandes villes francaises que
+# les clients mentionnent parfois explicitement) : si aucune de ces villes
+# ni aucun code postal n'apparait dans une adresse, on suppose qu'elle se
+# trouve a Nice (siege de l'activite), pour eviter que Google Maps ne la
+# geocode par erreur sur une rue homonyme d'une autre ville (ex: il existe
+# un "Boulevard Gambetta" dans plusieurs villes de France).
+VILLES_CONNUES = [
+    "nice", "cagnes-sur-mer", "cagnes sur mer", "saint-laurent-du-var",
+    "saint laurent du var", "antibes", "cannes", "grasse", "vence", "menton",
+    "villeneuve-loubet", "villeneuve loubet", "beaulieu", "villefranche",
+    "carros", "mougins", "valbonne", "biot", "roquefort", "marseille",
+    "paris", "lyon", "toulon", "monaco", "aix-en-provence", "aix en provence",
+]
+
+
+def completer_adresse_avec_ville(adresse: str) -> str:
+    """Ajoute ', Nice, France' si l'adresse ne mentionne ni ville connue ni
+    code postal, pour fiabiliser le geocodage Google Maps."""
+    adresse_minuscule = (adresse or "").lower()
+    if re.search(r"\b\d{5}\b", adresse_minuscule):
+        return adresse
+    if any(ville in adresse_minuscule for ville in VILLES_CONNUES):
+        return adresse
+    return f"{adresse}, Nice, France"
+
+
 def estimer_duree_trajet(origine: str, destination: str) -> int | None:
     """Estime la duree du trajet en minutes entre deux adresses via l'API
     Google Distance Matrix. Renvoie None si indisponible ou en echec."""
@@ -1046,8 +1072,8 @@ def webhook_sms():
                     # temps de trajet reel + une marge de securite.
                     heure_minute = parser_heure_texte(donnees_completes["heure_rdv"])
                     duree_trajet = estimer_duree_trajet(
-                        resoudre_adresse_medicale(donnees_completes["prise_en_charge"]),
-                        resoudre_adresse_medicale(donnees_completes["destination"]),
+                        completer_adresse_avec_ville(resoudre_adresse_medicale(donnees_completes["prise_en_charge"])),
+                        completer_adresse_avec_ville(resoudre_adresse_medicale(donnees_completes["destination"])),
                     )
                     if heure_minute and duree_trajet is not None:
                         heure_rdv_h, heure_rdv_m = heure_minute
