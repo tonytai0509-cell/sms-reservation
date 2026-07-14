@@ -516,7 +516,7 @@ def construire_reponse(
         for champ in CHAMPS_OBLIGATOIRES
         if not donnees.get(champ)
     ]
-    intro = "Bonjour, je suis Kelly, la secretaire de la Centrale Taxi Nicoise. " if premier_message else ""
+    intro = "Bonjour, je suis Kelly, la secretaire de la Centrale des Taxis Nicois. " if premier_message else ""
 
     if manquants:
         # Cas particulier frequent en medical : le client a donne l'heure de
