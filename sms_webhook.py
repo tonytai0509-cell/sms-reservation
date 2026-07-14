@@ -189,6 +189,11 @@ Champs :
   complete et explicite de nouvelle reservation. false sinon.
 - reference_lookup : si confirmation_existante est true ET que le client
   cite un code de reference, ce code (majuscules). Sinon null.
+- reclamation : true si le message exprime un probleme, une plainte ou une
+  insatisfaction concernant le service (ex: "mon taxi n'est pas venu",
+  "chauffeur en retard", "je ne suis pas content", "personne n'est venu me
+  chercher"), plutot qu'une demande de reservation ou une question de
+  suivi normale. false sinon.
 
 Regles generales :
 - Un champ deja connu ne doit JAMAIS etre efface ou remplace par une valeur
@@ -206,7 +211,7 @@ Regles generales :
 Reponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou apres,
 et SANS balises markdown (pas de ```json, pas de backticks du tout).
 Ta reponse doit commencer directement par { et finir par }, au format exact :
-{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "date": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false, "annulation": true/false, "reference_annulation": ..., "confirmation_existante": true/false, "reference_lookup": ...}
+{"type": "...", "nom": ..., "telephone": ..., "prise_en_charge": ..., "destination": ..., "heure_rdv": ..., "heure": ..., "date": ..., "heure_iso": ..., "est_question": true/false, "plusieurs_courses": true/false, "annulation": true/false, "reference_annulation": ..., "confirmation_existante": true/false, "reference_lookup": ..., "reclamation": true/false}
 """
 
 CHAMPS_OBLIGATOIRES = {
@@ -922,6 +927,7 @@ def webhook_sms():
             annulation = donnees_extraites.pop("annulation", False)
             confirmation_existante = donnees_extraites.pop("confirmation_existante", False)
             reference_lookup = (donnees_extraites.pop("reference_lookup", None) or "").strip().upper()
+            reclamation = donnees_extraites.pop("reclamation", False)
 
             # Garde-fou : l'IA marque parfois est_question=true alors que le
             # message apporte quand meme de nouvelles infos exploitables
@@ -934,6 +940,25 @@ def webhook_sms():
                 valeur and donnees_extraites.get(champ) != donnees_existantes.get(champ)
                 for champ, valeur in donnees_extraites.items()
             )
+
+            if reclamation:
+                # Le client signale un probleme (taxi pas venu, retard,
+                # etc.) -> priorite absolue sur tout le reste. On repond de
+                # facon humaine et on alerte immediatement l'administrateur
+                # par SMS pour qu'il puisse rappeler le client lui-meme.
+                log.info("Reclamation detectee pour %s : %s", expediteur, message)
+                texte_reponse = (
+                    "Je suis vraiment desolee pour ce desagrement. "
+                    "Je transmets immediatement votre message a un responsable "
+                    "qui va vous recontacter au plus vite."
+                )
+                for numero_admin in ADMIN_PHONE_NUMBERS:
+                    envoyer_sms(
+                        numero_admin,
+                        f"RECLAMATION de {expediteur} : {message}",
+                    )
+                envoyer_sms(expediteur, texte_reponse)
+                return jsonify({"status": "ok"}), 200
 
             if annulation:
                 # Le client demande d'annuler une reservation.
