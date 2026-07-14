@@ -152,17 +152,23 @@ Champs :
   une date precise comme "le 20 juillet"), au format exact "AAAA-MM-JJ",
   calculee a partir de la date actuelle donnee plus bas. Le client peut
   ecrire la date sous N'IMPORTE QUELLE forme courante, a interpreter
-  systematiquement : "16 01", "16.01", "16/01", "16-01", "16 janvier",
-  "le 16/01", "16/01/2026" (jour/mois, ou jour/mois/annee si precisee -
-  en France le jour vient toujours en premier, jamais le mois). Si aucune
-  annee n'est precisee, prends l'annee en cours ou la suivante selon que la
-  date est deja passee ou non par rapport a aujourd'hui. CONTRAIREMENT a
-  heure/heure_iso, ce champ doit etre rempli DES QU'UNE DATE est evoquee,
-  MEME SI aucune heure precise n'est encore donnee (ex: "rendez-vous
-  apres-demain" sans heure -> date rempli, heure/heure_iso restent null en
-  attendant l'heure precise). Une fois rempli, il n'est JAMAIS efface --
-  garde-le meme si les messages suivants ne reparlent pas de la date, sauf
-  si le client mentionne clairement une nouvelle date differente.
+  systematiquement, AVEC OU SANS zero devant les chiffres < 10 :
+  "16 01", "16.01", "16/01", "16-01", "16 janvier", "le 16/01",
+  "16/01/2026", "8.8", "8/8", "8 8", "le 8 aout" (jour/mois, ou
+  jour/mois/annee si precisee - en France le jour vient toujours en
+  premier, jamais le mois). "8.8" ou "8/8" ou "8 8" signifient TOUJOURS le
+  8 aout, jamais une heure ni un decimal -- ne confonds jamais deux
+  chiffres separes par un point, un slash, un tiret ou un espace avec une
+  heure (une heure s'ecrit avec un "h" comme "13h" ou "13h30", jamais avec
+  un point ou un slash). Si aucune annee n'est precisee, prends l'annee en
+  cours ou la suivante selon que la date est deja passee ou non par
+  rapport a aujourd'hui. CONTRAIREMENT a heure/heure_iso, ce champ doit
+  etre rempli DES QU'UNE DATE est evoquee, MEME SI aucune heure precise
+  n'est encore donnee (ex: "rendez-vous apres-demain" sans heure -> date
+  rempli, heure/heure_iso restent null en attendant l'heure precise). Une
+  fois rempli, il n'est JAMAIS efface -- garde-le meme si les messages
+  suivants ne reparlent pas de la date, sauf si le client mentionne
+  clairement une nouvelle date differente.
 - heure_iso : UNIQUEMENT si le champ "heure" ci-dessus est rempli, la
   date et heure de prise en charge au format exact "AAAA-MM-JJTHH:MM:00"
   (ex: "2026-07-14T08:30:00"). Utilise en PRIORITE le champ "date" ci-dessus
