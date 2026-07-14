@@ -59,6 +59,16 @@ GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 FUSEAU_HORAIRE = ZoneInfo("Europe/Paris")
 
+# Numeros autorises a utiliser la commande rapide "RDV" (voir plus bas).
+# Configurable via la variable Railway ADMIN_PHONE_NUMBERS (numeros separes
+# par des virgules, format international +336...). Par defaut, seul le
+# numero habituel de Tony y a acces.
+ADMIN_PHONE_NUMBERS = {
+    numero.strip()
+    for numero in os.environ.get("ADMIN_PHONE_NUMBERS", "+33624125779").split(",")
+    if numero.strip()
+}
+
 # Dossier de stockage persistant (Volume Railway monte sur /data). Si le
 # volume n'existe pas (ex: en local), on retombe sur le dossier courant
 # pour ne jamais planter au demarrage.
@@ -785,13 +795,18 @@ def webhook_sms():
         # deduit du numero expediteur), puisque l'expediteur est celui qui
         # tape la commande, pas forcement le client.
         message_sans_espaces = message.strip()
-        if re.match(r"^rdv\b", message_sans_espaces, re.IGNORECASE):
+        if re.match(r"^rdv\b", message_sans_espaces, re.IGNORECASE) and expediteur in ADMIN_PHONE_NUMBERS:
             contenu_rdv = re.sub(r"^rdv\b", "", message_sans_espaces, count=1, flags=re.IGNORECASE).strip()
             if not contenu_rdv:
                 texte_reponse = (
-                    "Format RDV (en un seul message) :\n"
-                    "RDV nom telephone adresse_prise_en_charge destination date heure\n"
-                    "Ex : RDV Dupont 0612345678 10 rue de Nice Aeroport T2 demain 8h30"
+                    "Rendez Vous Admin :\n\n"
+                    "Nom : \n"
+                    "Tel :\n"
+                    "Date :\n"
+                    "PC : \n"
+                    "DEST :\n"
+                    "Heure PC : \n"
+                    "Heure RDV :"
                 )
                 envoyer_sms(expediteur, texte_reponse)
                 return jsonify({"status": "ok"}), 200
