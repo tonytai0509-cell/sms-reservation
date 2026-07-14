@@ -1305,6 +1305,9 @@ def rappels_demain():
         if telephone in ("?", "", None):
             resultats.append({"evenement": ev.get("summary"), "envoye": False, "raison": "telephone introuvable"})
             continue
+        if reference in ("?", "", None):
+            resultats.append({"evenement": ev.get("summary"), "envoye": False, "raison": "reference introuvable (pas une reservation SMS)"})
+            continue
 
         # L'heure de prise en charge n'est pas un champ separe dans la
         # description, elle correspond a l'heure de debut de l'evenement
