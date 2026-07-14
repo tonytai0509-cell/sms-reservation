@@ -592,6 +592,32 @@ def construire_recap_depuis_evenement(ev: dict) -> str:
     return f"Oui, c'est bien prevu : prise en charge {pc}, direction {dest} ({rdv})."
 
 
+def lister_evenements_du_jour(date_cible: "date") -> list[dict]:
+    """Liste tous les evenements Google Agenda dont le debut tombe le jour
+    donne (utilise pour les rappels J-1 aux clients)."""
+    if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
+        return []
+    try:
+        service = _construire_service_agenda()
+        debut_jour = datetime.combine(date_cible, datetime.min.time(), tzinfo=FUSEAU_HORAIRE)
+        fin_jour = debut_jour + timedelta(days=1)
+        resultat = (
+            service.events()
+            .list(
+                calendarId=GOOGLE_CALENDAR_ID,
+                timeMin=debut_jour.isoformat(),
+                timeMax=fin_jour.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+            )
+            .execute()
+        )
+        return resultat.get("items", [])
+    except Exception as e:
+        log.error("Erreur listing evenements du jour (%s) : %s", date_cible, e)
+        return []
+
+
 def _construire_service_agenda():
     infos_compte = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
     creds = service_account.Credentials.from_service_account_info(
@@ -1254,6 +1280,55 @@ def reinitialiser_numero():
         "reservation_effacee": existait_reservation,
         "attente_annulation_effacee": existait_attente,
         "message": f"Memoire reinitialisee pour {numero}. Tu peux recommencer un test comme un nouveau client.",
+    }), 200
+
+
+@app.route("/admin/rappels-demain", methods=["GET"])
+def rappels_demain():
+    """A appeler une fois par jour (voir cron) : envoie a chaque client
+    ayant une reservation le LENDEMAIN un SMS de rappel/confirmation, avec
+    les infos TELLES QU'ELLES SONT ACTUELLEMENT dans Google Agenda -- donc
+    a jour meme si la prise en charge (ou autre) a ete modifiee a la main
+    par Tony directement dans l'agenda apres la creation initiale."""
+    demain = (datetime.now(FUSEAU_HORAIRE) + timedelta(days=1)).date()
+    evenements = lister_evenements_du_jour(demain)
+
+    resultats = []
+    for ev in evenements:
+        description = ev.get("description", "")
+        telephone = extraire_champ_de_description(description, "TEL")
+        pc = extraire_champ_de_description(description, "PC")
+        dest = extraire_champ_de_description(description, "DEST")
+        rdv = extraire_champ_de_description(description, "RDV")
+        reference = extraire_champ_de_description(description, "REF")
+
+        if telephone in ("?", "", None):
+            resultats.append({"evenement": ev.get("summary"), "envoye": False, "raison": "telephone introuvable"})
+            continue
+
+        # L'heure de prise en charge n'est pas un champ separe dans la
+        # description, elle correspond a l'heure de debut de l'evenement
+        # (ce qui reflete aussi un decalage fait a la main dans l'agenda).
+        debut_iso = ev.get("start", {}).get("dateTime")
+        heure_pc = "?"
+        if debut_iso:
+            try:
+                heure_pc = datetime.fromisoformat(debut_iso).strftime("%Hh%M")
+            except ValueError:
+                pass
+
+        texte_rappel = (
+            f"Rappel : votre taxi de demain est confirme a {heure_pc}. "
+            f"Prise en charge {pc}, direction {dest} ({rdv}). "
+            f"Ref: {reference}. A demain !"
+        )
+        envoyer_sms(telephone, texte_rappel)
+        resultats.append({"telephone": telephone, "reference": reference})
+
+    return jsonify({
+        "date_ciblee": demain.isoformat(),
+        "nombre_reservations": len(evenements),
+        "rappels": resultats,
     }), 200
 
 
