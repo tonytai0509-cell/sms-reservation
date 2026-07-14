@@ -911,7 +911,15 @@ def webhook_sms():
         entree_existante = recuperer_entree(expediteur)
         donnees_existantes = entree_existante["donnees"] if entree_existante else {}
 
-        donnees_extraites = extraire_reservation(message, donnees_existantes)
+        # Pour un numero admin, une fois la course precedente complete, on
+        # ne transmet plus son contexte a l'IA : chaque nouvelle course
+        # tapee par l'admin doit repartir de zero, jamais se meler aux
+        # infos de la course precedente (nom, adresse, heure...).
+        contexte_extraction = donnees_existantes
+        if expediteur in ADMIN_PHONE_NUMBERS and entree_existante and entree_existante.get("complete"):
+            contexte_extraction = {}
+
+        donnees_extraites = extraire_reservation(message, contexte_extraction)
 
         if donnees_extraites is None:
             # Echec de l'IA (cle manquante, erreur reseau, etc.) -> on previent
@@ -1134,13 +1142,22 @@ def webhook_sms():
                 # des clients differents a la suite) -> on ne doit surtout
                 # pas recycler l'ancien evenement/reference, meme si
                 # l'ancienne reservation etait deja complete.
+                # De plus, pour un numero admin, CHAQUE message complet est
+                # toujours une nouvelle course independante (meme si c'est
+                # le meme nom de client qui revient avec un autre trajet),
+                # car l'admin ne "corrige" jamais une reservation en cours
+                # via un message de suivi -- il tape chaque course d'un
+                # bloc. On ne recycle donc JAMAIS l'ancien evenement pour
+                # un expediteur admin.
                 nom_precedent = (donnees_existantes or {}).get("nom")
                 nouveau_client_different = bool(
                     nom_precedent and donnees_completes.get("nom")
                     and donnees_completes["nom"] != nom_precedent
                 )
                 etait_deja_complete = bool(
-                    entree_existante and entree_existante["complete"] and not nouveau_client_different
+                    entree_existante and entree_existante["complete"]
+                    and not nouveau_client_different
+                    and expediteur not in ADMIN_PHONE_NUMBERS
                 )
                 est_complete_maintenant = not champs_manquants
                 event_id_a_conserver = None
