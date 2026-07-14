@@ -140,7 +140,13 @@ Champs :
   "demain") NE COMPTE PAS non plus comme une heure valide.
 - date : la date evoquee par le client (aujourd'hui, demain, apres-demain,
   une date precise comme "le 20 juillet"), au format exact "AAAA-MM-JJ",
-  calculee a partir de la date actuelle donnee plus bas. CONTRAIREMENT a
+  calculee a partir de la date actuelle donnee plus bas. Le client peut
+  ecrire la date sous N'IMPORTE QUELLE forme courante, a interpreter
+  systematiquement : "16 01", "16.01", "16/01", "16-01", "16 janvier",
+  "le 16/01", "16/01/2026" (jour/mois, ou jour/mois/annee si precisee -
+  en France le jour vient toujours en premier, jamais le mois). Si aucune
+  annee n'est precisee, prends l'annee en cours ou la suivante selon que la
+  date est deja passee ou non par rapport a aujourd'hui. CONTRAIREMENT a
   heure/heure_iso, ce champ doit etre rempli DES QU'UNE DATE est evoquee,
   MEME SI aucune heure precise n'est encore donnee (ex: "rendez-vous
   apres-demain" sans heure -> date rempli, heure/heure_iso restent null en
@@ -197,6 +203,7 @@ CHAMPS_OBLIGATOIRES = {
     "nom": "votre nom",
     "prise_en_charge": "l'adresse de prise en charge",
     "destination": "la destination",
+    "date": "la date du transport",
     "heure": "l'heure a laquelle le chauffeur doit venir vous chercher",
 }
 
@@ -769,6 +776,59 @@ def webhook_sms():
     log.info("SMS recu de %s : %s", expediteur, message)
 
     if expediteur and message:
+        # Commande rapide "RDV" : permet de creer une reservation en un
+        # seul message (utile quand un chauffeur tape lui-meme la demande
+        # d'un client, ex: dans la voiture). Toujours traite sans memoire
+        # (stateless) pour ne jamais bloquer/melanger plusieurs reservations
+        # tapees a la suite depuis le meme telephone. Le telephone du
+        # client est obligatoire ici (contrairement au flux normal ou on le
+        # deduit du numero expediteur), puisque l'expediteur est celui qui
+        # tape la commande, pas forcement le client.
+        message_sans_espaces = message.strip()
+        if re.match(r"^rdv\b", message_sans_espaces, re.IGNORECASE):
+            contenu_rdv = re.sub(r"^rdv\b", "", message_sans_espaces, count=1, flags=re.IGNORECASE).strip()
+            if not contenu_rdv:
+                texte_reponse = (
+                    "Format RDV (en un seul message) :\n"
+                    "RDV nom telephone adresse_prise_en_charge destination date heure\n"
+                    "Ex : RDV Dupont 0612345678 10 rue de Nice Aeroport T2 demain 8h30"
+                )
+                envoyer_sms(expediteur, texte_reponse)
+                return jsonify({"status": "ok"}), 200
+
+            donnees_rdv = extraire_reservation(contenu_rdv, {})
+            if donnees_rdv is None:
+                envoyer_sms(expediteur, "Erreur technique lors de l'analyse, merci de reessayer.")
+                return jsonify({"status": "ok"}), 200
+
+            for cle_meta in (
+                "est_question", "plusieurs_courses", "annulation", "reference_annulation",
+                "confirmation_existante", "reference_lookup",
+            ):
+                donnees_rdv.pop(cle_meta, None)
+
+            champs_manquants_rdv = [c for c in CHAMPS_OBLIGATOIRES if not donnees_rdv.get(c)]
+            if not donnees_rdv.get("telephone"):
+                champs_manquants_rdv.append("telephone")
+
+            if champs_manquants_rdv:
+                libelles_rdv = [CHAMPS_OBLIGATOIRES.get(c, "le telephone du client") for c in champs_manquants_rdv]
+                texte_reponse = "Il manque encore :\n" + "\n".join(f"- {l}" for l in libelles_rdv)
+                envoyer_sms(expediteur, texte_reponse)
+                return jsonify({"status": "ok"}), 200
+
+            reference_rdv = generer_reference()
+            succes_rdv, detail_rdv, event_id_rdv = creer_evenement_agenda(
+                donnees_rdv, numero_expediteur=expediteur, reference=reference_rdv,
+            )
+            if succes_rdv:
+                texte_reponse = construire_reponse(donnees_rdv, reference_rdv)
+            else:
+                log.error("Echec creation evenement Agenda (commande RDV) pour %s : %s", expediteur, detail_rdv)
+                texte_reponse = f"Erreur lors de la creation de la reservation : {detail_rdv}"
+            envoyer_sms(expediteur, texte_reponse)
+            return jsonify({"status": "ok"}), 200
+
         # Priorite absolue : si on avait propose un choix de reservations a
         # annuler, et que ce nouveau message correspond a l'un des codes
         # Ref proposes (meme envoye seul, sans le mot "annuler"), on traite
