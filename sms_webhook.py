@@ -1128,7 +1128,20 @@ def webhook_sms():
                 champs_manquants = [
                     c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
                 ]
-                etait_deja_complete = bool(entree_existante and entree_existante["complete"])
+                # Si le nom du client differe de celui deja connu pour ce
+                # numero, c'est une reservation DIFFERENTE (ex: le numero
+                # admin de Tony sert a creer plusieurs reservations pour
+                # des clients differents a la suite) -> on ne doit surtout
+                # pas recycler l'ancien evenement/reference, meme si
+                # l'ancienne reservation etait deja complete.
+                nom_precedent = (donnees_existantes or {}).get("nom")
+                nouveau_client_different = bool(
+                    nom_precedent and donnees_completes.get("nom")
+                    and donnees_completes["nom"] != nom_precedent
+                )
+                etait_deja_complete = bool(
+                    entree_existante and entree_existante["complete"] and not nouveau_client_different
+                )
                 est_complete_maintenant = not champs_manquants
                 event_id_a_conserver = None
                 reference_a_conserver = None
@@ -1224,6 +1237,35 @@ def reinitialiser_numero():
         "reservation_effacee": existait_reservation,
         "attente_annulation_effacee": existait_attente,
         "message": f"Memoire reinitialisee pour {numero}. Tu peux recommencer un test comme un nouveau client.",
+    }), 200
+
+
+@app.route("/admin/verifier-reservation", methods=["GET"])
+def verifier_reservation():
+    """Cherche directement dans Google Agenda un evenement contenant ce
+    code de reference, pour verifier qu'une reservation confirmee par SMS
+    a bien ete creee cote agenda. Usage :
+    /admin/verifier-reservation?reference=ZRTK9Z"""
+    reference = request.args.get("reference", "").strip().upper()
+    if not reference:
+        return jsonify({"erreur": "Merci de fournir ?reference=XXXXXX dans l'URL."}), 400
+
+    evenements = rechercher_evenements(reference, seulement_futur=False)
+    resultats = [
+        {
+            "titre": e.get("summary"),
+            "debut": e.get("start", {}).get("dateTime"),
+            "lien": e.get("htmlLink"),
+        }
+        for e in evenements
+        if extraire_reference_de_description(e.get("description", "")) == reference
+        or reference in (e.get("summary") or "")
+    ]
+    return jsonify({
+        "reference": reference,
+        "trouve": bool(resultats),
+        "evenements": resultats,
+        "calendar_id_utilise": GOOGLE_CALENDAR_ID,
     }), 200
 
 
