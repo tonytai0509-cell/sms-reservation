@@ -802,6 +802,64 @@ def creer_evenement_agenda(
         return False, str(e), None
 
 
+def modifier_evenement_agenda(
+    event_id: str, donnees: dict, numero_expediteur: str = "", reference: str = ""
+) -> tuple[bool, str]:
+    """Met a jour le CONTENU REEL d'un evenement Google Agenda existant
+    (titre, description, horaires) pour qu'il reflete une correction,
+    au lieu de se contenter de renvoyer un SMS avec du nouveau texte sans
+    jamais toucher a l'agenda -- ce qui laissait l'agenda perime malgre
+    une confirmation par SMS."""
+    if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
+        return False, "Google Agenda non configure (variables manquantes sur Railway)"
+    if not donnees.get("heure_iso"):
+        return False, "Pas de date/heure exacte disponible (heure_iso manquant)"
+    try:
+        debut_dt = datetime.fromisoformat(donnees["heure_iso"])
+    except ValueError as e:
+        return False, f"Date/heure invalide ({donnees['heure_iso']}) : {e}"
+
+    fin_dt = debut_dt + timedelta(hours=1)
+    type_label = "MEDICAL" if donnees.get("type") == "medical" else "PRIVE"
+    type_tag = "[MED]" if type_label == "MEDICAL" else "[PRIVE]"
+    telephone = donnees.get("telephone") or numero_expediteur or "(non renseigne)"
+    heure_aff = debut_dt.strftime("%Hh%M")
+    heure_rdv_minute = parser_heure_texte(donnees.get("heure_rdv") or "")
+    heure_rdv_aff = (
+        f"{heure_rdv_minute[0]:02d}h{heure_rdv_minute[1]:02d}" if heure_rdv_minute else heure_aff
+    )
+    titre = (
+        f"PC {heure_aff} M. {donnees['nom']} | "
+        f"PC : {donnees['prise_en_charge']} | "
+        f"DEST : {donnees['destination']} | "
+        f"RDV : {heure_rdv_aff} {type_tag} | "
+        f"TEL : {telephone} | REF : {reference}"
+    ).upper()
+    description = (
+        f"REF : {reference}\n"
+        f"PC : {donnees['prise_en_charge']}\n"
+        f"DEST : {donnees['destination']}\n"
+        f"RDV : {heure_rdv_aff} {type_tag}\n"
+        f"TEL : {telephone}"
+    ).upper()
+
+    try:
+        service = _construire_service_agenda()
+        evenement = {
+            "summary": titre,
+            "description": description,
+            "start": {"dateTime": debut_dt.isoformat(), "timeZone": "Europe/Paris"},
+            "end": {"dateTime": fin_dt.isoformat(), "timeZone": "Europe/Paris"},
+            "colorId": "5",
+        }
+        service.events().update(
+            calendarId=GOOGLE_CALENDAR_ID, eventId=event_id, body=evenement
+        ).execute()
+        return True, "evenement mis a jour"
+    except Exception as e:
+        return False, str(e)
+
+
 def supprimer_evenement_agenda(event_id: str) -> tuple[bool, str]:
     """Supprime un evenement de Google Agenda a partir de son ID."""
     if not GOOGLE_SERVICE_ACCOUNT_JSON or not GOOGLE_CALENDAR_ID:
@@ -1279,11 +1337,17 @@ def webhook_sms():
                 # un expediteur admin.
                 nom_precedent = (donnees_existantes or {}).get("nom")
                 date_precedente = (donnees_existantes or {}).get("date")
+                destination_precedente = (donnees_existantes or {}).get("destination")
+                pc_precedente = (donnees_existantes or {}).get("prise_en_charge")
                 nouveau_client_different = bool(
                     (nom_precedent and donnees_completes.get("nom")
                      and donnees_completes["nom"] != nom_precedent)
                     or (date_precedente and donnees_completes.get("date")
                         and donnees_completes["date"] != date_precedente)
+                    or (destination_precedente and donnees_completes.get("destination")
+                        and donnees_completes["destination"] != destination_precedente)
+                    or (pc_precedente and donnees_completes.get("prise_en_charge")
+                        and donnees_completes["prise_en_charge"] != pc_precedente)
                 )
                 etait_deja_complete = bool(
                     entree_existante and entree_existante["complete"]
@@ -1346,10 +1410,22 @@ def webhook_sms():
                         creation_echouee = True
                 elif etait_deja_complete:
                     # Reservation deja complete auparavant (ex: correction
-                    # mineure apres coup) -> on garde l'event_id/reference
-                    # existants.
+                    # mineure apres coup, comme un changement d'heure de
+                    # quelques minutes) -> on garde l'event_id/reference
+                    # existants, MAIS on met aussi a jour le contenu reel de
+                    # l'evenement Google Agenda si quelque chose a change,
+                    # pour que l'agenda ne reste jamais perime malgre le SMS
+                    # de confirmation envoye au client.
                     event_id_a_conserver = entree_existante.get("event_id")
                     reference_a_conserver = entree_existante.get("reference")
+                    if donnees_completes != donnees_existantes and event_id_a_conserver:
+                        succes_maj, detail_maj = modifier_evenement_agenda(
+                            event_id_a_conserver, donnees_completes, expediteur, reference_a_conserver
+                        )
+                        if succes_maj:
+                            log.info("Evenement Google Agenda mis a jour pour %s", expediteur)
+                        else:
+                            log.error("Echec mise a jour evenement Agenda pour %s : %s", expediteur, detail_maj)
 
                 if creation_echouee:
                     texte_reponse = (
