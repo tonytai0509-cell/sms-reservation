@@ -1294,14 +1294,19 @@ def webhook_sms():
                 event_id_a_conserver = None
                 reference_a_conserver = None
 
-                # Protection anti-doublon : si la reservation etait deja
-                # complete ET que rien n'a change par rapport a avant, on
-                # ne renvoie pas de SMS (evite le spam en cas de livraison
-                # en double du meme SMS par SMS Gateway).
+                # Si la reservation etait deja complete ET que rien n'a
+                # change par rapport a avant, pas besoin de recreer un
+                # evenement -- mais on rassure quand meme le client au lieu
+                # de rester silencieux (les vrais doublons techniques de
+                # livraison webhook sont deja geres par MESSAGES_DEJA_TRAITES).
                 if etait_deja_complete and donnees_completes == donnees_existantes:
-                    log.info("Message identique a une reservation deja complete pour %s, ignore", expediteur)
-                    return jsonify({"status": "ok", "info": "doublon ignore"}), 200
+                    log.info("Message identique a une reservation deja complete pour %s, on rassure", expediteur)
+                    reference_existante = entree_existante.get("reference") if entree_existante else ""
+                    texte_reponse = construire_reponse(donnees_completes, reference_existante)
+                    envoyer_sms(expediteur, texte_reponse)
+                    return jsonify({"status": "ok", "info": "doublon confirme"}), 200
 
+                creation_echouee = False
                 if est_complete_maintenant and not etait_deja_complete:
                     # Limite anti-abus : pas plus de MAX_RESERVATIONS_ACTIVES
                     # reservations futures en meme temps pour un numero.
@@ -1331,8 +1336,14 @@ def webhook_sms():
                         else:
                             log.error("Echec envoi email pour %s : %s", expediteur, detail_email)
                     else:
+                        # IMPORTANT : la creation a reellement echoue -- on
+                        # ne doit surtout pas confirmer au client ni marquer
+                        # la reservation comme complete, sinon elle serait
+                        # consideree comme faite alors que rien n'existe
+                        # reellement dans l'agenda.
                         log.error("Echec creation evenement Agenda pour %s : %s", expediteur, detail)
                         reference_a_conserver = None
+                        creation_echouee = True
                 elif etait_deja_complete:
                     # Reservation deja complete auparavant (ex: correction
                     # mineure apres coup) -> on garde l'event_id/reference
@@ -1340,13 +1351,21 @@ def webhook_sms():
                     event_id_a_conserver = entree_existante.get("event_id")
                     reference_a_conserver = entree_existante.get("reference")
 
-                texte_reponse = construire_reponse(
-                    donnees_completes, reference_a_conserver if est_complete_maintenant else "",
-                    heure_estimee=heure_estimee, premier_message=(entree_existante is None),
-                )
+                if creation_echouee:
+                    texte_reponse = (
+                        "Une erreur technique nous empeche de finaliser votre reservation pour "
+                        "le moment. Merci de nous rappeler directement pour confirmer, ou de "
+                        "reessayer dans quelques minutes."
+                    )
+                else:
+                    texte_reponse = construire_reponse(
+                        donnees_completes, reference_a_conserver if est_complete_maintenant else "",
+                        heure_estimee=heure_estimee, premier_message=(entree_existante is None),
+                    )
 
                 sauvegarder_entree(
-                    expediteur, donnees_completes, complete=est_complete_maintenant,
+                    expediteur, donnees_completes,
+                    complete=(est_complete_maintenant and not creation_echouee),
                     event_id=event_id_a_conserver, reference=reference_a_conserver,
                 )
 
