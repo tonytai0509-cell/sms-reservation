@@ -138,8 +138,9 @@ Champs :
 - destination : meme regle que prise_en_charge -- doit etre une adresse ou
   un lieu precis, pas une reference vague.
 - heure_rdv : heure du rendez-vous/consultation/evenement lui-meme, si le
-  client la mentionne (ex: "j'ai rendez-vous a 12h", "consultation a 14h").
-  C'est une info indicative, PAS l'heure a laquelle le chauffeur doit venir.
+  client la mentionne EXPLICITEMENT comme telle (ex: "j'ai rendez-vous a
+  12h", "consultation a 14h", "mon rdv est a 14h"). C'est une info
+  indicative, PAS l'heure a laquelle le chauffeur doit venir.
 - heure : heure precise a laquelle le CHAUFFEUR doit venir chercher le
   client (ex: "venez me chercher a 8h30", "prise en charge 8h", ou une heure
   donnee directement sans mention de rendez-vous). ATTENTION : si le client
@@ -148,6 +149,15 @@ Champs :
   reste null (ce n'est pas la meme chose que heure_rdv) -- il faudra la lui
   demander explicitement. Une date seule sans heure chiffree (ex: juste
   "demain") NE COMPTE PAS non plus comme une heure valide.
+  REGLE CRITIQUE ANTI-CONFUSION : le fait que la destination soit un
+  hopital/clinique (type medical) NE VEUT PAS DIRE que l'heure donnee est
+  automatiquement celle du rendez-vous. Par defaut, une heure donnee SANS
+  mot explicite de rendez-vous/consultation ("rdv", "rendez-vous",
+  "consultation") est TOUJOURS l'heure de prise en charge (heure), meme
+  pour une destination medicale. Exemple : "Archet 2, demain 16h00" (sans
+  le mot rendez-vous) -> heure = "16h00" (prise en charge), heure_rdv =
+  null. Exemple contraire : "j'ai rdv a l'Archet a 16h00" -> heure_rdv =
+  "16h00", heure = null (a redemander).
 - date : la date evoquee par le client (aujourd'hui, demain, apres-demain,
   une date precise comme "le 20 juillet"), au format exact "AAAA-MM-JJ",
   calculee a partir de la date actuelle donnee plus bas. Le client peut
@@ -225,8 +235,36 @@ CHAMPS_OBLIGATOIRES = {
     "prise_en_charge": "l'adresse de prise en charge",
     "destination": "la destination",
     "date": "la date du transport",
-    "heure": "l'heure a laquelle le chauffeur doit venir vous chercher",
 }
+
+LIBELLE_HEURE_RDV = "l'heure de votre rendez-vous (l'heure a laquelle vous avez rendez-vous)"
+LIBELLE_HEURE_PC = "l'heure a laquelle le chauffeur doit venir vous chercher"
+
+
+def calculer_champs_manquants(donnees: dict) -> list[str]:
+    """Liste des champs obligatoires absents. Pour une course medicale, on
+    ne demande QUE l'heure du rendez-vous au client -- l'heure de prise en
+    charge est TOUJOURS calculee automatiquement a partir du trajet, pour
+    eviter toute confusion. On ne demande l'heure de prise en charge
+    directement que si ce calcul automatique echoue techniquement (trajet
+    impossible a estimer)."""
+    manquants = [champ for champ in CHAMPS_OBLIGATOIRES if not donnees.get(champ)]
+    if donnees.get("type") == "medical":
+        if not donnees.get("heure_rdv"):
+            manquants.append("heure_rdv")
+        elif not donnees.get("heure"):
+            manquants.append("heure")
+    elif not donnees.get("heure"):
+        manquants.append("heure")
+    return manquants
+
+
+def libelle_champ(champ: str) -> str:
+    if champ == "heure_rdv":
+        return LIBELLE_HEURE_RDV
+    if champ == "heure":
+        return LIBELLE_HEURE_PC
+    return CHAMPS_OBLIGATOIRES.get(champ, "le telephone du client")
 
 # Memoire des reservations par numero de telephone, qu'elles soient
 # completes ou non. Permet de repondre correctement a un message de suivi
@@ -246,6 +284,20 @@ DUREE_EXPIRATION_SECONDES = 60 * 60  # 1 heure
 # mot "annuler") soit reconnue directement sans repasser par l'IA.
 # Format : { "+336...": {"options": {"REF1": "event_id1", ...}, "expire": ts} }
 MEMOIRE_ANNULATION_EN_ATTENTE: dict[str, dict] = {}
+
+# Suivi des identifiants de SMS deja traites, pour eviter de traiter deux
+# fois le meme message si SMS Gateway (ou le reseau) livre le meme webhook
+# en double -- ce qui produirait deux reponses/reservations pour un seul
+# SMS du client.
+MESSAGES_DEJA_TRAITES: dict[str, float] = {}
+DUREE_DEDUP_SECONDES = 600  # 10 minutes
+
+
+def purger_messages_traites() -> None:
+    maintenant = time.time()
+    expires = [mid for mid, ts in MESSAGES_DEJA_TRAITES.items() if maintenant - ts > DUREE_DEDUP_SECONDES]
+    for mid in expires:
+        MESSAGES_DEJA_TRAITES.pop(mid, None)
 DUREE_ATTENTE_ANNULATION_SECONDES = 15 * 60  # 15 minutes
 
 # Anti-abus : nombre maximum de reservations futures autorisees en meme
@@ -517,23 +569,21 @@ def construire_reponse(
     Si premier_message est True, la reponse commence par une courte
     presentation de Kelly (uniquement pour le tout premier message d'une
     nouvelle conversation, pas les relances suivantes)."""
-    manquants = [
-        champ
-        for champ in CHAMPS_OBLIGATOIRES
-        if not donnees.get(champ)
-    ]
+    manquants = calculer_champs_manquants(donnees)
     intro = "Bonjour, je suis Kelly, la secretaire de la Centrale des Taxis Nicois. " if premier_message else ""
 
     if manquants:
-        # Cas particulier frequent en medical : le client a donne l'heure de
-        # son rendez-vous mais pas l'heure a laquelle le chauffeur doit
-        # venir -> on le precise clairement pour eviter la confusion.
+        # Ce cas ne survient que si le calcul automatique de l'heure de
+        # prise en charge a echoue techniquement (trajet non estimable) --
+        # en temps normal, on ne demande jamais cette heure directement.
         if manquants == ["heure"] and donnees.get("heure_rdv"):
             return (
-                f"{intro}Votre rendez-vous est note a {donnees['heure_rdv']}. "
-                "A quelle heure souhaitez-vous que le chauffeur vienne vous chercher ?"
+                f"{intro}Nous n'arrivons pas a calculer automatiquement "
+                "l'heure de prise en charge pour ce trajet. Merci de nous "
+                "indiquer directement l'heure a laquelle le chauffeur doit "
+                "venir vous chercher."
             )
-        libelles = [CHAMPS_OBLIGATOIRES[c] for c in manquants]
+        libelles = [libelle_champ(c) for c in manquants]
         return f"{intro}Pour reserver votre taxi, il me manque juste :\n" + "\n".join(
             f"- {libelle}" for libelle in libelles
         )
@@ -555,13 +605,25 @@ def construire_reponse(
     else:
         moment = donnees["heure"]
 
-    reponse = (
-        f"Reservation confirmee pour M. {nom} : prise en charge {moment} "
-        f"au {depart}, direction {destination}. "
-        "Un chauffeur vous contactera peu avant son arrivee."
-    )
-    if heure_estimee:
-        reponse += " (Heure de prise en charge estimee selon le trajet, sera ajustee si besoin.)"
+    if donnees.get("heure_rdv") and heure_estimee:
+        reponse = (
+            f"Reservation confirmee pour M. {nom} : rendez-vous a {donnees['heure_rdv']}. "
+            f"Le chauffeur passera vous chercher {moment} au {depart}, direction {destination} "
+            "(heure de prise en charge calculee automatiquement selon le trajet et une marge de securite). "
+            "Un chauffeur vous contactera peu avant son arrivee."
+        )
+    elif donnees.get("heure_rdv"):
+        reponse = (
+            f"Reservation confirmee pour M. {nom} : rendez-vous a {donnees['heure_rdv']}, "
+            f"prise en charge {moment} au {depart}, direction {destination}. "
+            "Un chauffeur vous contactera peu avant son arrivee."
+        )
+    else:
+        reponse = (
+            f"Reservation confirmee pour M. {nom} : prise en charge {moment} "
+            f"au {depart}, direction {destination}. "
+            "Un chauffeur vous contactera peu avant son arrivee."
+        )
     if reference:
         reponse += f" Ref: {reference} (a rappeler pour annuler)."
     return reponse
@@ -846,6 +908,14 @@ def webhook_sms():
     expediteur = payload.get("sender", "")
     message = payload.get("message", "")
 
+    message_id = payload.get("messageId") or payload.get("id")
+    if message_id:
+        purger_messages_traites()
+        if message_id in MESSAGES_DEJA_TRAITES:
+            log.info("SMS %s deja traite (webhook recu en double), ignore", message_id)
+            return jsonify({"status": "doublon ignore"}), 200
+        MESSAGES_DEJA_TRAITES[message_id] = time.time()
+
     log.info("SMS recu de %s : %s", expediteur, message)
 
     if expediteur and message:
@@ -885,12 +955,12 @@ def webhook_sms():
             ):
                 donnees_rdv.pop(cle_meta, None)
 
-            champs_manquants_rdv = [c for c in CHAMPS_OBLIGATOIRES if not donnees_rdv.get(c)]
+            champs_manquants_rdv = calculer_champs_manquants(donnees_rdv)
             if not donnees_rdv.get("telephone"):
                 champs_manquants_rdv.append("telephone")
 
             if champs_manquants_rdv:
-                libelles_rdv = [CHAMPS_OBLIGATOIRES.get(c, "le telephone du client") for c in champs_manquants_rdv]
+                libelles_rdv = [libelle_champ(c) for c in champs_manquants_rdv]
                 texte_reponse = "Il manque encore :\n" + "\n".join(f"- {l}" for l in libelles_rdv)
                 envoyer_sms(expediteur, texte_reponse)
                 return jsonify({"status": "ok"}), 200
@@ -1165,9 +1235,7 @@ def webhook_sms():
                             expediteur, donnees_completes["heure"], duree_trajet, marge_securite_minutes,
                         )
 
-                champs_manquants = [
-                    c for c in CHAMPS_OBLIGATOIRES if not donnees_completes.get(c)
-                ]
+                champs_manquants = calculer_champs_manquants(donnees_completes)
                 # Si le nom du client differe de celui deja connu pour ce
                 # numero, c'est une reservation DIFFERENTE (ex: le numero
                 # admin de Tony sert a creer plusieurs reservations pour
