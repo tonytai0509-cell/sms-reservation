@@ -1061,10 +1061,22 @@ def webhook_sms():
             # si aucun champ nouveau n'a ete apporte par rapport a ce qu'on
             # savait deja -- sinon on traite l'info normalement malgre le
             # tour de phrase interrogatif.
+            # Garde-fou supplementaire, plus direct : si le message contient
+            # a lui seul TOUTES les infos d'une reservation complete (nom +
+            # adresse + destination + date + une heure), c'est a coup sur
+            # une vraie nouvelle demande de reservation, jamais une simple
+            # question de confirmation -- independamment de toute
+            # comparaison avec les anciennes donnees.
+            semble_nouvelle_reservation_complete = bool(
+                donnees_extraites.get("nom") and donnees_extraites.get("prise_en_charge")
+                and donnees_extraites.get("destination") and donnees_extraites.get("date")
+                and (donnees_extraites.get("heure") or donnees_extraites.get("heure_rdv"))
+            )
+
             apporte_info_nouvelle = any(
                 valeur and donnees_extraites.get(champ) != donnees_existantes.get(champ)
                 for champ, valeur in donnees_extraites.items()
-            )
+            ) or semble_nouvelle_reservation_complete
 
             if reclamation:
                 # Le client signale un probleme (taxi pas venu, retard,
