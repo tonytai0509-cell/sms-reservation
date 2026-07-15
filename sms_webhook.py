@@ -1242,12 +1242,13 @@ def webhook_sms():
                         )
 
                 champs_manquants = calculer_champs_manquants(donnees_completes)
-                # Si le nom du client differe de celui deja connu pour ce
-                # numero, c'est une reservation DIFFERENTE (ex: le numero
-                # admin de Tony sert a creer plusieurs reservations pour
-                # des clients differents a la suite) -> on ne doit surtout
-                # pas recycler l'ancien evenement/reference, meme si
-                # l'ancienne reservation etait deja complete.
+                # Si le nom du client differe de celui deja connu, OU si la
+                # date differe de celle deja connue (ex: meme client qui
+                # reserve une DEUXIEME course, a une autre date, apres que
+                # la premiere ait deja ete confirmee), c'est une
+                # reservation DIFFERENTE -> on ne doit surtout pas recycler
+                # l'ancien evenement/reference, meme si l'ancienne
+                # reservation etait deja complete.
                 # De plus, pour un numero admin, CHAQUE message complet est
                 # toujours une nouvelle course independante (meme si c'est
                 # le meme nom de client qui revient avec un autre trajet),
@@ -1256,9 +1257,12 @@ def webhook_sms():
                 # bloc. On ne recycle donc JAMAIS l'ancien evenement pour
                 # un expediteur admin.
                 nom_precedent = (donnees_existantes or {}).get("nom")
+                date_precedente = (donnees_existantes or {}).get("date")
                 nouveau_client_different = bool(
-                    nom_precedent and donnees_completes.get("nom")
-                    and donnees_completes["nom"] != nom_precedent
+                    (nom_precedent and donnees_completes.get("nom")
+                     and donnees_completes["nom"] != nom_precedent)
+                    or (date_precedente and donnees_completes.get("date")
+                        and donnees_completes["date"] != date_precedente)
                 )
                 etait_deja_complete = bool(
                     entree_existante and entree_existante["complete"]
