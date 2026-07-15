@@ -205,11 +205,20 @@ Champs :
 - reference_annulation : si annulation est true ET que le client cite un
   code de reference (ex: "annulez ABC123", "annulez la reservation ABC123"),
   ce code exactement tel qu'ecrit (majuscules). Sinon null.
-- confirmation_existante : true si le client semble parler d'une
-  reservation/rendez-vous DEJA CONVENU par ailleurs et demande juste une
-  confirmation (ex: "je dois etre a 9h30 aux sources, c'est ok ?", "c'est
-  bien prevu ?", "vous confirmez ?"), plutot que de faire une demande
-  complete et explicite de nouvelle reservation. false sinon.
+- confirmation_existante : true UNIQUEMENT si le client pose une question
+  vague demandant si un rendez-vous/service DEJA CONVENU est bien prevu,
+  SANS redonner de details concrets et complets d'une nouvelle course (ex:
+  "je dois etre a 9h30 aux sources, c'est ok ?", "c'est bien prevu ?",
+  "vous confirmez ?"). FAUX des que le message contient des details
+  EXPLICITES ET COMPLETS d'une course (nom, adresse, destination, date,
+  heure) meme si le ton ressemble a une question ou contient des formules
+  comme "j'aurai encore besoin de vos services" -- dans ce cas c'est une
+  VRAIE nouvelle demande de reservation a traiter normalement, jamais une
+  simple confirmation. Exemple a ne PAS classer confirmation_existante :
+  "J'aurai encore besoin de vos services le 06/08. Rdv a 9h00, prise en
+  charge a 07h00, Derlyn Nathalie, 39 bd Louis Icard 06130 Grasse" -> ceci
+  est une nouvelle reservation complete (confirmation_existante = false),
+  meme si ecrite apres une reservation precedente deja confirmee.
 - reference_lookup : si confirmation_existante est true ET que le client
   cite un code de reference, ce code (majuscules). Sinon null.
 - reclamation : true si le message exprime un probleme, une plainte ou une
@@ -1146,7 +1155,7 @@ def webhook_sms():
                             + "\n".join(lignes)
                             + "\n\nRepondez avec le code Ref de celle a annuler (ex: 'annulez ABC123')."
                         )
-            elif confirmation_existante:
+            elif confirmation_existante and not apporte_info_nouvelle:
                 # Le client demande une confirmation d'un rendez-vous deja
                 # convenu (pas une nouvelle demande de reservation).
                 if reference_lookup:
