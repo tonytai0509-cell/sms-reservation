@@ -137,27 +137,34 @@ Champs :
   message semble par ailleurs complet.
 - destination : meme regle que prise_en_charge -- doit etre une adresse ou
   un lieu precis, pas une reference vague.
-- heure_rdv : heure du rendez-vous/consultation/evenement lui-meme, si le
-  client la mentionne EXPLICITEMENT comme telle (ex: "j'ai rendez-vous a
-  12h", "consultation a 14h", "mon rdv est a 14h"). C'est une info
-  indicative, PAS l'heure a laquelle le chauffeur doit venir.
+- heure_rdv : heure a laquelle le client doit ETRE ARRIVE quelque part (une
+  heure limite/d'arrivee), PAS l'heure de passage du chauffeur. A detecter
+  largement, pas seulement pour un rendez-vous medical : "j'ai rendez-vous
+  a 12h", "consultation a 14h", "mon rdv est a 14h", MAIS AUSSI "je dois
+  etre a l'aeroport pour 5h", "je dois y etre pour 8h", "mon vol/avion est
+  a 7h", "embarquement a 6h30", "mon train est a 9h", "il faut que j'y sois
+  a 10h", "je dois arriver avant 14h". Des que le client exprime une heure
+  a laquelle il doit ETRE ARRIVE (peu importe le contexte : medical,
+  aeroport, gare, travail...), c'est heure_rdv, jamais heure directement --
+  le systeme calculera lui-meme l'heure de prise en charge necessaire.
+  C'est une info indicative, PAS l'heure a laquelle le chauffeur doit venir.
 - heure : heure precise a laquelle le CHAUFFEUR doit venir chercher le
   client (ex: "venez me chercher a 8h30", "prise en charge 8h", ou une heure
-  donnee directement sans mention de rendez-vous). ATTENTION : si le client
-  dit seulement "j'ai rendez-vous a 12h" ou "consultation a 14h" SANS
-  preciser separement l'heure de prise en charge souhaitee, ALORS heure
-  reste null (ce n'est pas la meme chose que heure_rdv) -- il faudra la lui
-  demander explicitement. Une date seule sans heure chiffree (ex: juste
-  "demain") NE COMPTE PAS non plus comme une heure valide.
-  REGLE CRITIQUE ANTI-CONFUSION : le fait que la destination soit un
-  hopital/clinique (type medical) NE VEUT PAS DIRE que l'heure donnee est
-  automatiquement celle du rendez-vous. Par defaut, une heure donnee SANS
-  mot explicite de rendez-vous/consultation ("rdv", "rendez-vous",
-  "consultation") est TOUJOURS l'heure de prise en charge (heure), meme
-  pour une destination medicale. Exemple : "Archet 2, demain 16h00" (sans
-  le mot rendez-vous) -> heure = "16h00" (prise en charge), heure_rdv =
-  null. Exemple contraire : "j'ai rdv a l'Archet a 16h00" -> heure_rdv =
-  "16h00", heure = null (a redemander).
+  donnee directement sans mention d'un lieu/evenement a atteindre a une
+  heure precise). ATTENTION : si le client exprime une heure limite/heure
+  d'arrivee quelque part (voir heure_rdv ci-dessus) SANS preciser separement
+  l'heure de prise en charge souhaitee, ALORS heure reste null (ce n'est
+  pas la meme chose que heure_rdv) -- le systeme la calculera
+  automatiquement, il ne faut PAS la demander au client. Une date seule
+  sans heure chiffree (ex: juste "demain") NE COMPTE PAS non plus comme une
+  heure valide.
+  REGLE CRITIQUE ANTI-CONFUSION : par defaut, une heure donnee SANS aucune
+  notion d'arrivee/limite/rendez-vous ("rdv", "rendez-vous", "consultation",
+  "je dois etre a/pour", "mon vol/train est a", etc.) est TOUJOURS l'heure
+  de prise en charge (heure). Exemple : "Archet 2, demain 16h00" (aucune
+  notion d'arrivee/limite) -> heure = "16h00" (prise en charge), heure_rdv =
+  null. Exemple contraire : "je dois etre a l'aeroport pour 5h" -> heure_rdv
+  = "05:00", heure = null (calcule automatiquement, ne pas redemander).
 - date : la date evoquee par le client (aujourd'hui, demain, apres-demain,
   une date precise comme "le 20 juillet"), au format exact "AAAA-MM-JJ",
   calculee a partir de la date actuelle donnee plus bas. Le client peut
@@ -242,17 +249,16 @@ LIBELLE_HEURE_PC = "l'heure a laquelle le chauffeur doit venir vous chercher"
 
 
 def calculer_champs_manquants(donnees: dict) -> list[str]:
-    """Liste des champs obligatoires absents. Pour une course medicale, on
-    ne demande QUE l'heure du rendez-vous au client -- l'heure de prise en
-    charge est TOUJOURS calculee automatiquement a partir du trajet, pour
-    eviter toute confusion. On ne demande l'heure de prise en charge
-    directement que si ce calcul automatique echoue techniquement (trajet
-    impossible a estimer)."""
+    """Liste des champs obligatoires absents. Des qu'une heure limite/heure
+    d'arrivee (heure_rdv) est donnee -- medical ou non (aeroport, gare,
+    travail...) -- on ne demande QUE cette heure au client : l'heure de
+    prise en charge est TOUJOURS calculee automatiquement a partir du
+    trajet, pour eviter toute confusion. On ne demande l'heure de prise en
+    charge directement que si ce calcul automatique echoue techniquement,
+    ou si le client n'a exprime aucune notion d'heure limite du tout."""
     manquants = [champ for champ in CHAMPS_OBLIGATOIRES if not donnees.get(champ)]
-    if donnees.get("type") == "medical":
-        if not donnees.get("heure_rdv"):
-            manquants.append("heure_rdv")
-        elif not donnees.get("heure"):
+    if donnees.get("heure_rdv"):
+        if not donnees.get("heure"):
             manquants.append("heure")
     elif not donnees.get("heure"):
         manquants.append("heure")
