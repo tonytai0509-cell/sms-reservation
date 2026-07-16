@@ -968,6 +968,25 @@ def envoyer_sms(numero: str, texte: str) -> None:
         log.error("Echec envoi SMS a %s : %s", numero, e)
 
 
+MOTS_ACCUSE_RECEPTION = {
+    "merci", "super", "parfait", "ok", "okay", "d'accord", "daccord",
+    "nickel", "top", "cool", "bien recu", "entendu", "ca marche",
+    "merci a vous", "merci a demain", "a demain", "merci beaucoup",
+    "ok merci", "parfait merci", "super merci", "d'accord merci",
+    "merci bien", "tres bien", "bien", "compris", "note", "c'est note",
+    "ok c'est note", "oui", "d'accord merci a vous",
+}
+
+
+def est_accuse_reception(texte: str) -> bool:
+    """Detecte un message qui n'est qu'un simple accuse de reception
+    ("merci", "super", "ok"...) sans aucune info de reservation exploitable,
+    pour eviter un appel IA inutile (et couteux) a chaque "merci" recu."""
+    normalise = (texte or "").strip().lower().rstrip(".!? ")
+    normalise = normalise.replace("à", "a").replace("ç", "c")
+    return normalise in MOTS_ACCUSE_RECEPTION
+
+
 @app.route("/webhook/sms", methods=["POST"])
 def webhook_sms():
     corps_brut = request.get_data()
@@ -998,6 +1017,14 @@ def webhook_sms():
     log.info("SMS recu de %s : %s", expediteur, message)
 
     if expediteur and message:
+        if est_accuse_reception(message):
+            # Simple accuse de reception ("merci", "super", "ok"...) sans
+            # aucune info exploitable -> on ne fait PAS d'appel IA (inutile
+            # et couteux) et on ne renvoie rien, la conversation est deja
+            # terminee du point de vue du client.
+            log.info("Accuse de reception simple de %s, aucun traitement necessaire", expediteur)
+            return jsonify({"status": "ok", "info": "accuse de reception"}), 200
+
         # Commande rapide "RDV" : permet de creer une reservation en un
         # seul message (utile quand un chauffeur tape lui-meme la demande
         # d'un client, ex: dans la voiture). Toujours traite sans memoire
