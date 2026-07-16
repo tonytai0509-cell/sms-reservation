@@ -1212,7 +1212,7 @@ def webhook_sms():
                             options[ref] = ev["id"]
                             debut_iso = ev.get("start", {}).get("dateTime", "")
                             try:
-                                date_aff = datetime.fromisoformat(debut_iso).strftime("%d/%m a %Hh%M")
+                                date_aff = datetime.fromisoformat(debut_iso).astimezone(FUSEAU_HORAIRE).strftime("%d/%m a %Hh%M")
                             except ValueError:
                                 date_aff = debut_iso
                             lignes.append(f"{i}) {ref} - {date_aff} - {destination_ev}")
@@ -1516,13 +1516,14 @@ def rappels_demain():
         heure_pc = "?"
         if debut_iso:
             try:
-                heure_pc = datetime.fromisoformat(debut_iso).strftime("%Hh%M")
+                heure_pc = datetime.fromisoformat(debut_iso).astimezone(FUSEAU_HORAIRE).strftime("%Hh%M")
             except ValueError:
                 pass
 
         texte_rappel = (
-            f"Rappel : votre taxi de demain est confirme a {heure_pc}. "
-            f"Prise en charge {pc}, direction {dest} ({rdv}). "
+            f"Rappel : votre taxi de demain passe vous chercher a {heure_pc} "
+            f"(heure de prise en charge, pas celle du rendez-vous), "
+            f"au {pc}, direction {dest} (rendez-vous {rdv}). "
             f"Ref: {reference}. A demain !"
         )
         envoyer_sms(telephone, texte_rappel)
