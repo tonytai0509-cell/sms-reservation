@@ -419,7 +419,13 @@ def extraire_reservation(message: str, connu: dict | None = None) -> dict | None
             json={
                 "model": ANTHROPIC_MODEL,
                 "max_tokens": 300,
-                "system": PROMPT_SYSTEME,
+                "system": [
+                    {
+                        "type": "text",
+                        "text": PROMPT_SYSTEME,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
                 "messages": [{"role": "user", "content": contenu_utilisateur}],
             },
             timeout=20,
