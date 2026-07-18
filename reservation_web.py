@@ -154,6 +154,14 @@ def generer_reference() -> str:
     return "".join(random.choices(alphabet, k=6))
 
 
+def extraire_reference_de_description(description: str) -> str:
+    """Recupere le code de reference ecrit dans la description d'un
+    evenement Google Agenda (ligne 'REF : XXXXXX'). Meme logique que le
+    bot SMS, pour reconnaitre une reservation deja creee."""
+    trouve = re.search(r"REF\s*:\s*([A-Z0-9]+)", description or "", re.IGNORECASE)
+    return trouve.group(1).upper() if trouve else "?"
+
+
 def libelle_date_relative(dt: datetime) -> str:
     aujourd_hui = datetime.now(FUSEAU_HORAIRE).date()
     ecart = (dt.date() - aujourd_hui).days
@@ -479,6 +487,15 @@ FORMULAIRE_RESERVATION_HTML = """
     }
     caseInconnue.addEventListener('change', majEtatsChamps);
     majEtatsChamps();
+
+    // Empeche les doubles reservations en cas de double-clic ou d'appui
+    // rapide sur le bouton "Reserver mon taxi".
+    const formulaire = document.querySelector('form');
+    const boutonEnvoi = document.querySelector('button[type=submit]');
+    formulaire.addEventListener('submit', function () {
+      boutonEnvoi.disabled = true;
+      boutonEnvoi.textContent = 'Envoi en cours...';
+    });
   </script>
 </body>
 </html>
@@ -669,6 +686,28 @@ def valider_reservation():
             f"Vous avez deja {MAX_RESERVATIONS_ACTIVES} reservations en cours avec ce numero. "
             "Merci d'appeler la centrale pour en annuler une avant d'en ajouter une nouvelle."
         )
+
+    # Protection anti-doublon : si un evenement pour ce numero existe deja
+    # avec exactement la meme adresse de prise en charge, destination et
+    # heure de depart, c'est tres probablement un double-clic / une double
+    # soumission du formulaire -> on renvoie la confirmation de la
+    # reservation existante au lieu d'en creer une deuxieme.
+    for evenement in reservations_en_cours:
+        debut_existant = evenement.get("start", {}).get("dateTime", "")
+        description_existante = evenement.get("description", "")
+        if (
+            debut_existant.startswith(donnees["heure_iso"])
+            and donnees["prise_en_charge"].upper() in description_existante.upper()
+            and donnees["destination"].upper() in description_existante.upper()
+        ):
+            reference_existante = extraire_reference_de_description(description_existante)
+            log.info(
+                "Doublon detecte pour %s (ref existante %s), pas de nouvelle creation",
+                telephone, reference_existante,
+            )
+            return render_template_string(
+                CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference_existante
+            )
 
     reference = generer_reference()
     succes, detail, event_id = creer_evenement_agenda(donnees, reference)
