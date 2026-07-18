@@ -223,9 +223,10 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
     telephone = donnees.get("telephone") or "(non renseigne)"
     heure_aff = debut_dt.strftime("%Hh%M")
     heure_rdv_aff = donnees.get("heure_rdv") or heure_aff
+    nom_pour_agenda = donnees.get("nom_agenda") or donnees["nom"]
 
     titre = (
-        f"PC {heure_aff} M. {donnees['nom']} | "
+        f"PC {heure_aff} M. {nom_pour_agenda} | "
         f"PC : {donnees['prise_en_charge']} | "
         f"DEST : {donnees['destination']} | "
         f"RDV : {heure_rdv_aff} {type_tag} | "
@@ -785,6 +786,8 @@ def valider_reservation():
     # exactement la meme mise en forme qu'avant (un seul champ "nom") tout
     # en affichant le prenom en plus.
     nom_complet = f"{prenom} {nom}".strip()
+    # Format specifique pour l'agenda : NOM avant Prenom.
+    nom_pour_agenda = f"{nom} {prenom}".strip()
 
     telephone = normaliser_numero_francais(telephone_saisi)
 
@@ -796,6 +799,7 @@ def valider_reservation():
     donnees = {
         "type": "medical" if type_course == "medical" else "prive",
         "nom": nom_complet,
+        "nom_agenda": nom_pour_agenda,
         "telephone": telephone,
         "prise_en_charge": prise_en_charge,
         "destination": destination,
