@@ -398,7 +398,7 @@ FORMULAIRE_RESERVATION_HTML = """
   .entete { text-align: center; margin-bottom: 20px; position: relative; padding-top: 4px; }
   .entete svg { color: var(--navy); margin-bottom: 6px; }
   .entete .photo-agent {
-    position: absolute; top: 0; left: 0; width: 56px; height: 56px;
+    position: absolute; top: 0; left: 0; width: 112px; height: 112px;
     border-radius: 50%; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.18);
     border: 2px solid #fff;
   }
