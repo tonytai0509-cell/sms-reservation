@@ -375,128 +375,288 @@ FORMULAIRE_RESERVATION_HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reserver un taxi - Centrale des Taxis Nicois</title>
 <style>
-  :root { color-scheme: light; }
+  :root {
+    color-scheme: light;
+    --navy: #0d2a52;
+    --navy-dark: #081b38;
+    --vert: #1e8e3e;
+    --vert-clair: #e7f6ec;
+    --bordure: #dde2e8;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0; padding: 24px 16px 60px; background: #f4f5f7;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     color: #1a1a1a;
   }
+  .page { max-width: 480px; margin: 0 auto; }
+  .entete { text-align: center; margin-bottom: 20px; }
+  .entete svg { color: var(--navy); margin-bottom: 6px; }
+  .entete h1 {
+    font-size: 21px; margin: 0 0 4px; color: var(--navy); font-weight: 800;
+  }
+  .entete p { margin: 0; color: #667; font-size: 14px; }
+
   .carte {
-    max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 16px;
-    padding: 24px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    background: #ffffff; border-radius: 16px; padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin-bottom: 14px;
   }
-  h1 { font-size: 22px; margin: 0 0 4px; text-align: center; }
-  p.souscritre { margin: 0 0 24px; color: #555; font-size: 15px; text-align: center; }
-  label { display: block; font-weight: 600; margin: 18px 0 6px; font-size: 15px; }
+  .section-titre {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  }
+  .numero {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--navy);
+    color: #fff; font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .section-titre h2 { margin: 0; font-size: 16px; color: var(--navy); }
+
+  label {
+    display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; color: #333;
+  }
+  label:first-of-type { margin-top: 0; }
+
+  .champ-icone { position: relative; }
+  .champ-icone svg {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: #8a95a3; pointer-events: none;
+  }
+  .champ-icone input {
+    padding-left: 42px !important;
+  }
+
   input[type=text], input[type=tel], input[type=date], input[type=time] {
-    width: 100%; padding: 14px; font-size: 17px; border: 1px solid #ccc;
-    border-radius: 10px; background: #fafafa;
+    width: 100%; padding: 13px 14px; font-size: 16px; border: 1.5px solid var(--bordure);
+    border-radius: 10px; background: #fafbfc;
   }
-  input:focus { outline: 2px solid #f6a300; border-color: #f6a300; }
-  .choix { display: flex; gap: 10px; margin-top: 6px; }
+  input:focus { outline: none; border-color: var(--navy); }
+
+  .ligne-double { display: flex; gap: 10px; }
+  .ligne-double > div { flex: 1; }
+
+  .choix { display: flex; gap: 10px; margin: 6px 0 4px; }
   .choix label {
-    flex: 1; margin: 0; text-align: center; padding: 14px 8px; border: 2px solid #ddd;
-    border-radius: 10px; font-weight: 500; cursor: pointer; font-size: 15px;
+    flex: 1; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
+    text-align: center; padding: 13px 6px; border: 1.5px solid var(--bordure);
+    border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; color: #444;
   }
   .choix input { display: none; }
-  .choix label:has(input:checked) { border-color: #f6a300; background: #fff6e6; font-weight: 700; }
-  .aide { font-size: 13px; color: #777; margin-top: 6px; }
-  button {
-    width: 100%; margin-top: 28px; padding: 16px; font-size: 18px; font-weight: 700;
-    background: #1a1a1a; color: #fff; border: none; border-radius: 12px; cursor: pointer;
+  .choix label svg { flex-shrink: 0; }
+  #type_prive:checked ~ .choix-fill-prive,
+  label:has(#type_prive:checked) { border-color: var(--navy); background: #eef2f7; color: var(--navy); }
+  label:has(#type_medical:checked) { border-color: var(--vert); background: var(--vert-clair); color: var(--vert); }
+
+  .adresses { position: relative; }
+  .bouton-inverser {
+    position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+    width: 30px; height: 30px; border-radius: 50%; background: #fff;
+    border: 1.5px solid var(--bordure); display: flex; align-items: center;
+    justify-content: center; cursor: pointer; z-index: 2; color: var(--navy);
   }
-  button:active { background: #333; }
+
+  .case-auto {
+    margin-top: 12px; display: flex; align-items: flex-start; gap: 8px;
+    font-size: 13px; color: #555;
+  }
+  .case-auto input { width: auto; margin-top: 2px; }
+
+  button.envoyer {
+    width: 100%; margin-top: 4px; padding: 16px; font-size: 17px; font-weight: 700;
+    background: var(--navy); color: #fff; border: none; border-radius: 12px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  button.envoyer:active { background: var(--navy-dark); }
+  button.envoyer:disabled { opacity: 0.7; }
+
+  .pied {
+    text-align: center; font-size: 13px; color: #667; margin-top: 16px;
+  }
+  .pied .ligne { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; }
+  .pied a { color: var(--navy); font-weight: 600; text-decoration: none; }
+
   .erreur {
     background: #ffe9e9; color: #a30000; border: 1px solid #f3a3a3;
-    padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-bottom: 18px;
+    padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-bottom: 14px;
   }
 </style>
 </head>
 <body>
-  <div class="carte">
-    <h1>RESERVER VOTRE TAXI</h1>
-    <p class="souscritre">Centrale des Taxis Nicois<br>Reservez votre course en quelques instants.</p>
+<div class="page">
 
-    {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
+  <div class="entete">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/>
+      <rect x="3" y="11" width="18" height="6" rx="2"/>
+      <circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>
+    </svg>
+    <h1>Centrale des Taxis Nicois</h1>
+    <p>Reservez votre course en quelques instants</p>
+  </div>
 
-    <form method="POST" action="/reserver">
-      <label for="prenom">Votre prenom</label>
-      <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}" required>
+  {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
 
-      <label for="nom">Votre nom</label>
-      <input type="text" id="nom" name="nom" value="{{ valeurs.get('nom', '') }}" required>
+  <form method="POST" action="/reserver">
 
-      <label for="telephone">Votre numero de telephone</label>
-      <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
-             value="{{ valeurs.get('telephone', '') }}" required>
-
-      <label>Type de course</label>
-      <div class="choix">
-        <label for="type_prive"><input type="radio" id="type_prive" name="type_course" value="prive"
-               {% if valeurs.get('type_course', 'prive') == 'prive' %}checked{% endif %}> Course privee</label>
-        <label for="type_medical"><input type="radio" id="type_medical" name="type_course" value="medical"
-               {% if valeurs.get('type_course') == 'medical' %}checked{% endif %}> Medical</label>
+    <div class="carte">
+      <div class="section-titre">
+        <div class="numero">1</div>
+        <h2>Vos coordonnees</h2>
       </div>
 
-      <label for="prise_en_charge">Adresse de prise en charge</label>
-      <input type="text" id="prise_en_charge" name="prise_en_charge"
-             placeholder="Ex : 12 avenue de la Republique, Nice"
-             value="{{ valeurs.get('prise_en_charge', '') }}" required>
+      <div class="ligne-double">
+        <div>
+          <label for="prenom">Prenom</label>
+          <div class="champ-icone">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+            <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}" required>
+          </div>
+        </div>
+        <div>
+          <label for="nom">Nom</label>
+          <div class="champ-icone">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+            <input type="text" id="nom" name="nom" value="{{ valeurs.get('nom', '') }}" required>
+          </div>
+        </div>
+      </div>
 
-      <label for="destination">Destination</label>
-      <input type="text" id="destination" name="destination"
-             placeholder="Ex : Aeroport de Nice"
-             value="{{ valeurs.get('destination', '') }}" required>
+      <label for="telephone">Telephone</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
+        <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
+               value="{{ valeurs.get('telephone', '') }}" required>
+      </div>
+    </div>
 
-      <label for="date">Date du trajet</label>
-      <input type="date" id="date" name="date" min="{{ date_min }}"
-             value="{{ valeurs.get('date', '') }}" required>
+    <div class="carte">
+      <div class="section-titre">
+        <div class="numero">2</div>
+        <h2>Votre trajet</h2>
+      </div>
 
-      <label>A quelle heure ?</label>
-      <label for="heure_rdv" style="margin-top:14px;">Heure de rendez-vous</label>
-      <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
-
-      <label for="heure_pc">Heure de prise en charge</label>
-      <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}">
-
-      <div style="margin-top:14px; text-align:center; font-size:14px; color:#1a1a1a;">
-        <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
-               style="width:auto; vertical-align:middle;"
-               {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
-        <label for="heure_inconnue" style="display:inline; font-weight:400; margin:0;">
-          Je ne connais pas l'heure de prise en charge, la centrale la calculera automatiquement selon le trajet.
+      <div class="choix">
+        <label for="type_prive">
+          <input type="radio" id="type_prive" name="type_course" value="prive"
+                 {% if valeurs.get('type_course', 'prive') == 'prive' %}checked{% endif %}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>
+          Course privee
+        </label>
+        <label for="type_medical">
+          <input type="radio" id="type_medical" name="type_course" value="medical"
+                 {% if valeurs.get('type_course') == 'medical' %}checked{% endif %}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+          Transport medical
         </label>
       </div>
 
-      <button type="submit">Reserver mon taxi</button>
-    </form>
+      <div class="adresses">
+        <label for="prise_en_charge">Adresse de prise en charge</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          <input type="text" id="prise_en_charge" name="prise_en_charge"
+                 placeholder="Ex : 12 avenue de la Republique, Nice"
+                 value="{{ valeurs.get('prise_en_charge', '') }}" required>
+        </div>
+
+        <button type="button" class="bouton-inverser" id="bouton_inverser" aria-label="Inverser les adresses" style="top: 78px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v14M4 13l4 4 4-4"/><path d="M16 21V7M12 11l4-4 4 4"/></svg>
+        </button>
+
+        <label for="destination">Destination</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          <input type="text" id="destination" name="destination"
+                 placeholder="Ex : Aeroport de Nice"
+                 value="{{ valeurs.get('destination', '') }}" required>
+        </div>
+      </div>
+    </div>
+
+    <div class="carte">
+      <div class="section-titre">
+        <div class="numero">3</div>
+        <h2>Date et horaire</h2>
+      </div>
+
+      <label for="date">Date du trajet</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+        <input type="date" id="date" name="date" min="{{ date_min }}"
+               value="{{ valeurs.get('date', '') }}" required>
+      </div>
+
+      <label for="heure_rdv">Heure de rendez-vous</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
+      </div>
+
+      <label for="heure_pc">Heure de prise en charge</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}">
+      </div>
+
+      <div class="case-auto">
+        <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
+               {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
+        <label for="heure_inconnue" style="margin:0; font-weight:400; color:#555;">
+          Laissez la centrale calculer mon heure de prise en charge automatiquement selon le trajet.
+        </label>
+      </div>
+    </div>
+
+    <button type="submit" class="envoyer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>
+      Confirmer ma reservation
+    </button>
+  </form>
+
+  <div class="pied">
+    <div class="ligne">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      Vous recevrez une confirmation par SMS
+    </div>
+    <div class="ligne">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
+      Besoin d'aide ? <a href="tel:+33624836448">Appelez la centrale</a>
+    </div>
   </div>
+</div>
 
-  <script>
-    const caseInconnue = document.getElementById('heure_inconnue');
-    const champPC = document.getElementById('heure_pc');
-    const champRDV = document.getElementById('heure_rdv');
+<script>
+  const caseInconnue = document.getElementById('heure_inconnue');
+  const champPC = document.getElementById('heure_pc');
+  const champRDV = document.getElementById('heure_rdv');
 
-    function majEtatsChamps() {
-      const inconnue = caseInconnue.checked;
-      champPC.disabled = inconnue;
-      champPC.required = !inconnue;
-      if (inconnue) { champPC.value = ''; }
-      champRDV.required = inconnue;
-    }
-    caseInconnue.addEventListener('change', majEtatsChamps);
-    majEtatsChamps();
+  function majEtatsChamps() {
+    const inconnue = caseInconnue.checked;
+    champPC.disabled = inconnue;
+    champPC.required = !inconnue;
+    if (inconnue) { champPC.value = ''; }
+    champRDV.required = inconnue;
+  }
+  caseInconnue.addEventListener('change', majEtatsChamps);
+  majEtatsChamps();
 
-    // Empeche les doubles reservations en cas de double-clic ou d'appui
-    // rapide sur le bouton "Reserver mon taxi".
-    const formulaire = document.querySelector('form');
-    const boutonEnvoi = document.querySelector('button[type=submit]');
-    formulaire.addEventListener('submit', function () {
-      boutonEnvoi.disabled = true;
-      boutonEnvoi.textContent = 'Envoi en cours...';
-    });
-  </script>
+  // Bouton pour inverser l'adresse de prise en charge et la destination.
+  document.getElementById('bouton_inverser').addEventListener('click', function () {
+    const pc = document.getElementById('prise_en_charge');
+    const dest = document.getElementById('destination');
+    const temp = pc.value;
+    pc.value = dest.value;
+    dest.value = temp;
+  });
+
+  // Empeche les doubles reservations en cas de double-clic ou d'appui
+  // rapide sur le bouton "Confirmer ma reservation".
+  const formulaire = document.querySelector('form');
+  const boutonEnvoi = document.querySelector('button.envoyer');
+  formulaire.addEventListener('submit', function () {
+    boutonEnvoi.disabled = true;
+    boutonEnvoi.textContent = 'Envoi en cours...';
+  });
+</script>
 </body>
 </html>
 """
