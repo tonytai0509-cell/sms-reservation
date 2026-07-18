@@ -378,8 +378,8 @@ FORMULAIRE_RESERVATION_HTML = """
     max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 16px;
     padding: 24px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
   }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  p.souscritre { margin: 0 0 24px; color: #555; font-size: 15px; }
+  h1 { font-size: 22px; margin: 0 0 4px; text-align: center; }
+  p.souscritre { margin: 0 0 24px; color: #555; font-size: 15px; text-align: center; }
   label { display: block; font-weight: 600; margin: 18px 0 6px; font-size: 15px; }
   input[type=text], input[type=tel], input[type=date], input[type=time] {
     width: 100%; padding: 14px; font-size: 17px; border: 1px solid #ccc;
@@ -407,8 +407,8 @@ FORMULAIRE_RESERVATION_HTML = """
 </head>
 <body>
   <div class="carte">
-    <h1>Reserver votre taxi</h1>
-    <p class="souscritre">Centrale des Taxis Nicois -- remplissez le formulaire, vous recevrez une confirmation par SMS.</p>
+    <h1>🚕 Reserver votre taxi</h1>
+    <p class="souscritre">Centrale des Taxis Nicois<br>Reservez votre course en quelques instants.</p>
 
     {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
 
@@ -515,7 +515,11 @@ CONFIRMATION_RESERVATION_HTML = """
       {% endif %}
     </table>
     <div class="ref">Reference : {{ reference }}</div>
-    <p style="font-size:13px;color:#777;margin-top:14px;">
+    <p style="font-size:13px;color:#a30000;margin-top:14px;font-weight:600;">
+      Conservez cette reference : elle vous sera demandee pour annuler ou
+      modifier votre reservation (par SMS ou par telephone).
+    </p>
+    <p style="font-size:13px;color:#777;margin-top:10px;">
       Un SMS de confirmation avec cette reference vient de vous etre envoye.
       Un chauffeur vous contactera peu avant son arrivee.
     </p>
