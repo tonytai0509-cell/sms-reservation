@@ -446,24 +446,38 @@ FORMULAIRE_RESERVATION_HTML = """
              value="{{ valeurs.get('date', '') }}" required>
 
       <label>A quelle heure ?</label>
-      <div class="choix">
-        <label for="mode_pc"><input type="radio" id="mode_pc" name="mode_horaire" value="heure_pc"
-               {% if valeurs.get('mode_horaire', 'heure_pc') == 'heure_pc' %}checked{% endif %}> Heure de prise en charge</label>
-        <label for="mode_rdv"><input type="radio" id="mode_rdv" name="mode_horaire" value="heure_rdv"
-               {% if valeurs.get('mode_horaire') == 'heure_rdv' %}checked{% endif %}> Heure de rendez-vous</label>
-      </div>
-      <p class="aide">
-        "Heure de rendez-vous" = l'heure a laquelle vous devez etre arrive
-        (consultation, avion, train...). L'heure de passage du chauffeur
-        sera alors calculee automatiquement.
-      </p>
+      <label for="heure_rdv" style="margin-top:14px;">Heure de rendez-vous <span style="font-weight:400;color:#777;">(si vous en avez un)</span></label>
+      <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
 
-      <label for="heure">Heure</label>
-      <input type="time" id="heure" name="heure" value="{{ valeurs.get('heure', '') }}" required>
+      <label for="heure_pc">Heure de prise en charge</label>
+      <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}">
+
+      <label style="display:flex; align-items:flex-start; gap:8px; font-weight:400; font-size:14px; margin-top:10px;">
+        <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
+               style="width:auto; margin-top:3px;"
+               {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
+        <span>Je ne connais pas l'heure de prise en charge -- la centrale la calculera automatiquement selon le trajet.</span>
+      </label>
 
       <button type="submit">Reserver mon taxi</button>
     </form>
   </div>
+
+  <script>
+    const caseInconnue = document.getElementById('heure_inconnue');
+    const champPC = document.getElementById('heure_pc');
+    const champRDV = document.getElementById('heure_rdv');
+
+    function majEtatsChamps() {
+      const inconnue = caseInconnue.checked;
+      champPC.disabled = inconnue;
+      champPC.required = !inconnue;
+      if (inconnue) { champPC.value = ''; }
+      champRDV.required = inconnue;
+    }
+    caseInconnue.addEventListener('change', majEtatsChamps);
+    majEtatsChamps();
+  </script>
 </body>
 </html>
 """
@@ -563,10 +577,11 @@ def valider_reservation():
     prise_en_charge = (request.form.get("prise_en_charge") or "").strip()
     destination = (request.form.get("destination") or "").strip()
     date_str = (request.form.get("date") or "").strip()
-    mode_horaire = request.form.get("mode_horaire") or "heure_pc"
-    heure_saisie = (request.form.get("heure") or "").strip()
+    heure_rdv_saisie = (request.form.get("heure_rdv") or "").strip()
+    heure_pc_saisie = (request.form.get("heure_pc") or "").strip()
+    heure_inconnue = request.form.get("heure_inconnue") == "oui"
 
-    if not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str, heure_saisie]):
+    if not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str]):
         return page_erreur("Merci de remplir tous les champs du formulaire.")
 
     # Nom complet utilise partout ensuite (agenda, email, SMS), pour garder
@@ -581,11 +596,6 @@ def valider_reservation():
     except ValueError:
         return page_erreur("La date saisie n'est pas valide.")
 
-    heure_minute = parser_heure_texte(heure_saisie.replace(":", "h"))
-    if not heure_minute:
-        return page_erreur("L'heure saisie n'est pas valide.")
-    heure_h, heure_m = heure_minute
-
     donnees = {
         "type": "medical" if type_course == "medical" else "prive",
         "nom": nom_complet,
@@ -597,9 +607,24 @@ def valider_reservation():
         "heure_iso": None,
     }
 
+    # L'heure de rendez-vous est toujours facultative -- si elle est fournie,
+    # on la garde pour affichage/agenda, meme quand l'heure de prise en
+    # charge est aussi connue directement.
+    if heure_rdv_saisie:
+        heure_minute_rdv = parser_heure_texte(heure_rdv_saisie.replace(":", "h"))
+        if not heure_minute_rdv:
+            return page_erreur("L'heure de rendez-vous saisie n'est pas valide.")
+        rdv_h, rdv_m = heure_minute_rdv
+        donnees["heure_rdv"] = f"{rdv_h:02d}h{rdv_m:02d}"
+
     heure_estimee = False
-    if mode_horaire == "heure_rdv":
-        donnees["heure_rdv"] = f"{heure_h:02d}h{heure_m:02d}"
+
+    if heure_inconnue:
+        if not heure_rdv_saisie:
+            return page_erreur(
+                "Merci d'indiquer l'heure de rendez-vous pour que la centrale "
+                "puisse calculer automatiquement l'heure de prise en charge."
+            )
         duree_trajet = estimer_duree_trajet(
             completer_adresse_avec_ville(resoudre_adresse_medicale(prise_en_charge)),
             completer_adresse_avec_ville(resoudre_adresse_medicale(destination)),
@@ -607,11 +632,12 @@ def valider_reservation():
         if duree_trajet is None:
             return page_erreur(
                 "Impossible d'estimer automatiquement l'heure de prise en charge pour "
-                "ce trajet. Merci de choisir plutot \"Heure de prise en charge\", ou "
-                "d'appeler directement la centrale."
+                "ce trajet. Merci de renseigner directement l'heure de prise en "
+                "charge, ou d'appeler la centrale."
             )
+        rdv_h, rdv_m = parser_heure_texte(heure_rdv_saisie.replace(":", "h"))
         date_rdv = datetime.fromisoformat(date_str).replace(
-            hour=heure_h, minute=heure_m, tzinfo=FUSEAU_HORAIRE
+            hour=rdv_h, minute=rdv_m, tzinfo=FUSEAU_HORAIRE
         )
         marge_securite_minutes = 15 if duree_trajet < 30 else 30
         heure_pc_dt = date_rdv - timedelta(minutes=duree_trajet + marge_securite_minutes)
@@ -622,8 +648,17 @@ def valider_reservation():
         donnees["heure"] = heure_pc_dt.strftime("%Hh%M")
         heure_estimee = True
     else:
-        donnees["heure"] = f"{heure_h:02d}h{heure_m:02d}"
-        pc_dt = datetime.fromisoformat(date_str).replace(hour=heure_h, minute=heure_m)
+        if not heure_pc_saisie:
+            return page_erreur(
+                "Merci d'indiquer l'heure de prise en charge, ou de cocher la "
+                "case si vous ne la connaissez pas."
+            )
+        heure_minute_pc = parser_heure_texte(heure_pc_saisie.replace(":", "h"))
+        if not heure_minute_pc:
+            return page_erreur("L'heure de prise en charge saisie n'est pas valide.")
+        pc_h, pc_m = heure_minute_pc
+        donnees["heure"] = f"{pc_h:02d}h{pc_m:02d}"
+        pc_dt = datetime.fromisoformat(date_str).replace(hour=pc_h, minute=pc_m)
         donnees["heure_iso"] = pc_dt.isoformat()
 
     reservations_en_cours = rechercher_evenements(telephone, seulement_futur=True)
