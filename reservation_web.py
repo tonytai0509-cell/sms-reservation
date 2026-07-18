@@ -407,7 +407,7 @@ FORMULAIRE_RESERVATION_HTML = """
 </head>
 <body>
   <div class="carte">
-    <h1>🚕 Reserver votre taxi</h1>
+    <h1>RESERVER VOTRE TAXI</h1>
     <p class="souscritre">Centrale des Taxis Nicois<br>Reservez votre course en quelques instants.</p>
 
     {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
@@ -446,18 +446,20 @@ FORMULAIRE_RESERVATION_HTML = """
              value="{{ valeurs.get('date', '') }}" required>
 
       <label>A quelle heure ?</label>
-      <label for="heure_rdv" style="margin-top:14px;">Heure de rendez-vous <span style="font-weight:400;color:#777;">(si vous en avez un)</span></label>
+      <label for="heure_rdv" style="margin-top:14px;">Heure de rendez-vous</label>
       <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
 
       <label for="heure_pc">Heure de prise en charge</label>
       <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}">
 
-      <label style="display:flex; align-items:flex-start; gap:8px; font-weight:400; font-size:14px; margin-top:10px;">
+      <div style="margin-top:14px; text-align:center; font-size:14px; color:#1a1a1a;">
         <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
-               style="width:auto; margin-top:3px;"
+               style="width:auto; vertical-align:middle;"
                {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
-        <span>Je ne connais pas l'heure de prise en charge -- la centrale la calculera automatiquement selon le trajet.</span>
-      </label>
+        <label for="heure_inconnue" style="display:inline; font-weight:400; margin:0;">
+          Je ne connais pas l'heure de prise en charge, la centrale la calculera automatiquement selon le trajet.
+        </label>
+      </div>
 
       <button type="submit">Reserver mon taxi</button>
     </form>
