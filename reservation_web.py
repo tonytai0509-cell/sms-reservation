@@ -397,7 +397,7 @@ FORMULAIRE_RESERVATION_HTML = """
   }
   .page { max-width: 480px; margin: 0 auto; }
   .entete {
-    display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding-top: 4px;
+    display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; padding-top: 4px;
   }
   .entete .photo-agent {
     width: 84px; height: 84px; flex-shrink: 0;
@@ -500,11 +500,6 @@ FORMULAIRE_RESERVATION_HTML = """
   <div class="entete">
     <img class="photo-agent" src="data:image/jpeg;base64,{{ photo_agent }}" alt="Votre interlocutrice">
     <div class="entete-texte">
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/>
-        <rect x="3" y="11" width="18" height="6" rx="2"/>
-        <circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>
-      </svg>
       <h1>Centrale des Taxis Nicois</h1>
       <p>Reservez votre course en quelques instants</p>
     </div>
