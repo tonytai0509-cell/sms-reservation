@@ -989,6 +989,14 @@ def est_accuse_reception(texte: str) -> bool:
 
 @app.route("/webhook/sms", methods=["POST"])
 def webhook_sms():
+    if os.environ.get("BOT_EN_PAUSE", "").lower() in ("1", "true", "oui"):
+        # Pause du bot sans toucher au domaine/webhook : mettre la variable
+        # Railway BOT_EN_PAUSE a "true" ignore tous les SMS entrants
+        # (aucun traitement, aucune reponse envoyee). Remettre a "false"
+        # (ou supprimer la variable) pour reprendre normalement.
+        log.info("Bot en pause (BOT_EN_PAUSE actif), SMS ignore")
+        return jsonify({"status": "bot en pause"}), 200
+
     corps_brut = request.get_data()
     timestamp = request.headers.get("X-Timestamp", "")
     signature = request.headers.get("X-Signature", "")
