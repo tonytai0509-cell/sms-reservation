@@ -61,6 +61,10 @@ else:
 
 MAX_RESERVATIONS_ACTIVES = int(os.environ.get("MAX_RESERVATIONS_ACTIVES", "5"))
 
+# Code secret pour le mode admin (voir /reserver?admin=CE_CODE). Changez-le
+# en ajoutant une variable ADMIN_ACCESS_CODE sur Railway pour ce service.
+ADMIN_ACCESS_CODE = os.environ.get("ADMIN_ACCESS_CODE", "kelly-admin-2026")
+
 
 # ---------------------------------------------------------------------------
 # Aide a l'adressage (memes tables que le bot SMS, dupliquees ici pour que
@@ -239,6 +243,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"RDV : {heure_rdv_aff} {type_tag}\n"
         f"TEL : {telephone}\n"
         f"SOURCE : reservation en ligne"
+        + ("\nRAPPEL : NON" if donnees.get("mode_admin") else "")
     ).upper()
 
     try:
@@ -492,6 +497,10 @@ FORMULAIRE_RESERVATION_HTML = """
     background: #ffe9e9; color: #a30000; border: 1px solid #f3a3a3;
     padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-bottom: 14px;
   }
+  .banniere-admin {
+    background: #0d2a52; color: #fff; padding: 10px 14px; border-radius: 10px;
+    font-size: 13px; margin-bottom: 14px; text-align: center; font-weight: 600;
+  }
 </style>
 </head>
 <body>
@@ -506,8 +515,12 @@ FORMULAIRE_RESERVATION_HTML = """
   </div>
 
   {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
+  {% if mode_admin %}
+    <div class="banniere-admin">Mode administrateur -- aucun SMS ne sera envoye au client</div>
+  {% endif %}
 
   <form method="POST" action="/reserver">
+    {% if mode_admin %}<input type="hidden" name="admin_code" value="{{ admin_code }}">{% endif %}
 
     <div class="carte">
       <div class="section-titre">
@@ -720,6 +733,11 @@ CONFIRMATION_RESERVATION_HTML = """
       {% endif %}
     </table>
     <div class="ref">Reference : {{ reference }}</div>
+    {% if mode_admin %}
+    <p style="font-size:13px;color:#0d2a52;margin-top:14px;font-weight:600;">
+      Ajoutee a l'agenda -- mode admin, aucun SMS envoye au client.
+    </p>
+    {% else %}
     <p style="font-size:13px;color:#a30000;margin-top:14px;font-weight:600;">
       Conservez cette reference : elle vous sera demandee pour annuler ou
       modifier votre reservation (par SMS ou par telephone).
@@ -728,7 +746,8 @@ CONFIRMATION_RESERVATION_HTML = """
       Un SMS de confirmation avec cette reference vient de vous etre envoye.
       Un chauffeur vous contactera peu avant son arrivee.
     </p>
-    <a class="retour" href="/reserver">Faire une nouvelle reservation</a>
+    {% endif %}
+    <a class="retour" href="/reserver{% if mode_admin %}?admin={{ admin_code }}{% endif %}">Faire une nouvelle reservation</a>
   </div>
 </body>
 </html>
@@ -746,9 +765,10 @@ def racine():
 @app.route("/reserver", methods=["GET"])
 def page_reservation():
     date_min = datetime.now(FUSEAU_HORAIRE).strftime("%Y-%m-%d")
+    mode_admin = request.args.get("admin") == ADMIN_ACCESS_CODE
     return render_template_string(
         FORMULAIRE_RESERVATION_HTML, erreur=None, date_min=date_min, valeurs={},
-        photo_agent=PHOTO_AGENT_B64,
+        photo_agent=PHOTO_AGENT_B64, mode_admin=mode_admin, admin_code=ADMIN_ACCESS_CODE,
     )
 
 
@@ -756,11 +776,12 @@ def page_reservation():
 def valider_reservation():
     date_min = datetime.now(FUSEAU_HORAIRE).strftime("%Y-%m-%d")
     valeurs = request.form.to_dict()
+    mode_admin = request.form.get("admin_code") == ADMIN_ACCESS_CODE
 
     def page_erreur(message: str):
         return render_template_string(
             FORMULAIRE_RESERVATION_HTML, erreur=message, date_min=date_min, valeurs=valeurs,
-            photo_agent=PHOTO_AGENT_B64,
+            photo_agent=PHOTO_AGENT_B64, mode_admin=mode_admin, admin_code=ADMIN_ACCESS_CODE,
         )
 
     prenom = (request.form.get("prenom") or "").strip()
@@ -795,6 +816,7 @@ def valider_reservation():
         "type": "medical" if type_course == "medical" else "prive",
         "nom": nom_complet,
         "nom_agenda": nom_pour_agenda,
+        "mode_admin": mode_admin,
         "telephone": telephone,
         "prise_en_charge": prise_en_charge,
         "destination": destination,
@@ -883,7 +905,8 @@ def valider_reservation():
                 telephone, reference_existante,
             )
             return render_template_string(
-                CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference_existante
+                CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference_existante,
+                mode_admin=mode_admin, admin_code=ADMIN_ACCESS_CODE,
             )
 
     reference = generer_reference()
@@ -895,17 +918,25 @@ def valider_reservation():
             "Merci d'appeler directement la centrale pour reserver votre taxi."
         )
 
-    envoyer_email_confirmation(donnees, reference)
-    texte_sms = construire_sms_confirmation(donnees, reference, heure_estimee)
-    envoyer_sms(telephone, texte_sms)
-
-    log.info(
-        "Reservation web creee : %s (ref %s, tel %s, event %s)",
-        nom, reference, telephone, event_id,
-    )
+    if mode_admin:
+        # Mode admin : la reservation a deja ete prise par telephone par
+        # Tony/un collegue -- pas besoin de reconfirmer au client par SMS.
+        log.info(
+            "Reservation ADMIN creee : %s (ref %s, tel %s, event %s) -- pas de SMS envoye",
+            nom, reference, telephone, event_id,
+        )
+    else:
+        envoyer_email_confirmation(donnees, reference)
+        texte_sms = construire_sms_confirmation(donnees, reference, heure_estimee)
+        envoyer_sms(telephone, texte_sms)
+        log.info(
+            "Reservation web creee : %s (ref %s, tel %s, event %s)",
+            nom, reference, telephone, event_id,
+        )
 
     return render_template_string(
-        CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference
+        CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference, mode_admin=mode_admin,
+        admin_code=ADMIN_ACCESS_CODE
     )
 
 
