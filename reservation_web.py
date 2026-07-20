@@ -516,7 +516,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
   {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
   {% if mode_admin %}
-    <div class="banniere-admin">Mode administrateur -- aucun SMS ne sera envoye au client</div>
+    <div class="banniere-admin">MODE ADMINISTRATEUR</div>
   {% endif %}
 
   <form method="POST" action="/reserver">
