@@ -636,9 +636,6 @@ FORMULAIRE_RESERVATION_HTML = """
       {% endif %}
 
       <label for="telephone">{% if role == 'secretaire' %}Telephone de contact{% else %}Telephone{% endif %}</label>
-      {% if role == 'secretaire' %}
-      <p style="margin: -4px 0 6px; font-size: 12px; color: #999;">Patient ou service</p>
-      {% endif %}
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
         <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
