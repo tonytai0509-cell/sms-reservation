@@ -613,7 +613,7 @@ FORMULAIRE_RESERVATION_HTML = """
       <label for="patient_nom_complet">Nom et prénom du patient</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
-        <input type="text" id="patient_nom_complet" name="patient_nom_complet" placeholder="Ex. : Jean Dupont"
+        <input type="text" id="patient_nom_complet" name="patient_nom_complet" placeholder="Ex. : Dupont Jean"
                value="{{ valeurs.get('patient_nom_complet', '') }}" required>
       </div>
       {% else %}
