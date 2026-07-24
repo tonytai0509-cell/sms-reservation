@@ -968,11 +968,13 @@ def valider_reservation():
         )
 
     if mode_admin:
-        # Mode admin : la reservation a deja ete prise par telephone par
-        # Tony/un collegue -- pas besoin de reconfirmer au client par SMS.
+        if role == "secretaire":
+            # Mode partenaire/secretaire : pas de SMS au client, mais on
+            # notifie quand meme Tony par email pour qu'il soit au courant.
+            envoyer_email_confirmation(donnees, reference)
         log.info(
-            "Reservation ADMIN creee : %s (ref %s, tel %s, event %s) -- pas de SMS envoye",
-            nom, reference, telephone, event_id,
+            "Reservation %s creee : %s (ref %s, tel %s, event %s) -- pas de SMS envoye",
+            (role or "admin").upper(), nom, reference, telephone, event_id,
         )
     else:
         envoyer_email_confirmation(donnees, reference)
@@ -992,4 +994,3 @@ def valider_reservation():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
-j
