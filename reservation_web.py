@@ -580,7 +580,7 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       {% if role == 'secretaire' %}
-      <label for="nom_infirmiere">Nom de l'infirmiere</label>
+      <label for="nom_infirmiere">Nom de la secretaire / infirmiere</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
         <input type="text" id="nom_infirmiere" name="nom_infirmiere"
@@ -843,7 +843,7 @@ def valider_reservation():
         return page_erreur("Merci de remplir tous les champs du formulaire.")
 
     if role == "secretaire" and not nom_infirmiere:
-        return page_erreur("Merci d'indiquer le nom de l'infirmiere.")
+        return page_erreur("Merci d'indiquer le nom de la secretaire ou de l'infirmiere.")
 
     # Nom complet utilise partout ensuite (agenda, email, SMS), pour garder
     # exactement la meme mise en forme qu'avant (un seul champ "nom") tout
@@ -992,3 +992,4 @@ def valider_reservation():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+j
