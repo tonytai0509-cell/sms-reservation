@@ -433,11 +433,11 @@ FORMULAIRE_RESERVATION_HTML = """
 
   @media (min-width: 720px) {
     body { padding: 40px 24px 60px; }
-    .page { max-width: 760px; }
+    .page { max-width: 880px; }
     .grille-haut {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;
+      display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start;
     }
-    .grille-haut .carte { margin-bottom: 0; }
+    .grille-haut .carte { margin-bottom: 0; min-width: 0; }
   }
   .entete {
     display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; padding-top: 4px;
@@ -511,6 +511,7 @@ FORMULAIRE_RESERVATION_HTML = """
     border-radius: 10px; background: #fafbfc;
   }
   input:focus { outline: none; border-color: var(--navy); }
+  input::placeholder { font-size: 14px; }
 
   .ligne-double { display: flex; gap: 10px; }
   .ligne-double > div { flex: 1; }
@@ -701,7 +702,7 @@ FORMULAIRE_RESERVATION_HTML = """
         <div class="champ-icone">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
           <input type="text" id="prise_en_charge" name="prise_en_charge"
-                 placeholder="Ex : 12 avenue de la Republique, Nice"
+                 placeholder="Ex : 12 av. de la Republique"
                  value="{{ valeurs.get('prise_en_charge', '') }}" required>
         </div>
 
