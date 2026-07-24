@@ -269,6 +269,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"RDV : {heure_rdv_aff} {type_tag}\n"
         f"TEL : {telephone}\n"
         f"SOURCE : {source_label}"
+        + (f"\nINFIRMIERE : {donnees['nom_infirmiere']}" if donnees.get("nom_infirmiere") else "")
         + ("\nRAPPEL : NON" if donnees.get("mode_admin") else "")
     ).upper()
 
@@ -542,7 +543,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
   {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
   {% if mode_admin %}
-    <div class="banniere-admin">{% if role == 'secretaire' %}MODE SECRETAIRE{% else %}MODE ADMINISTRATEUR{% endif %}</div>
+    <div class="banniere-admin">{% if role == 'secretaire' %}MODE PARTENAIRE{% else %}MODE ADMINISTRATEUR{% endif %}</div>
   {% endif %}
 
   <form method="POST" action="/reserver">
@@ -577,6 +578,15 @@ FORMULAIRE_RESERVATION_HTML = """
         <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
                value="{{ valeurs.get('telephone', '') }}" required>
       </div>
+
+      {% if role == 'secretaire' %}
+      <label for="nom_infirmiere">Nom de l'infirmiere</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+        <input type="text" id="nom_infirmiere" name="nom_infirmiere"
+               value="{{ valeurs.get('nom_infirmiere', '') }}" required>
+      </div>
+      {% endif %}
     </div>
 
     <div class="carte">
@@ -586,15 +596,17 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       <div class="choix">
+        {% if role != 'secretaire' %}
         <label for="type_prive">
           <input type="radio" id="type_prive" name="type_course" value="prive"
                  {% if valeurs.get('type_course', 'prive') == 'prive' %}checked{% endif %}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>
           Course privee
         </label>
+        {% endif %}
         <label for="type_medical">
           <input type="radio" id="type_medical" name="type_course" value="medical"
-                 {% if valeurs.get('type_course') == 'medical' %}checked{% endif %}>
+                 {% if role == 'secretaire' or valeurs.get('type_course') == 'medical' %}checked{% endif %}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
           Transport medical
         </label>
@@ -761,7 +773,7 @@ CONFIRMATION_RESERVATION_HTML = """
     <div class="ref">Reference : {{ reference }}</div>
     {% if mode_admin %}
     <p style="font-size:13px;color:#0d2a52;margin-top:14px;font-weight:600;">
-      Ajoutee a l'agenda -- {% if role == 'secretaire' %}mode secretaire{% else %}mode admin{% endif %}, aucun SMS envoye au client.
+      Ajoutee a l'agenda -- {% if role == 'secretaire' %}mode partenaire{% else %}mode admin{% endif %}, aucun SMS envoye au client.
     </p>
     {% else %}
     <p style="font-size:13px;color:#a30000;margin-top:14px;font-weight:600;">
@@ -818,7 +830,8 @@ def valider_reservation():
     prenom = (request.form.get("prenom") or "").strip()
     nom = (request.form.get("nom") or "").strip()
     telephone_saisi = (request.form.get("telephone") or "").strip()
-    type_course = request.form.get("type_course") or "prive"
+    type_course = "medical" if role == "secretaire" else (request.form.get("type_course") or "prive")
+    nom_infirmiere = (request.form.get("nom_infirmiere") or "").strip()
     prise_en_charge = (request.form.get("prise_en_charge") or "").strip()
     destination = (request.form.get("destination") or "").strip()
     date_str = (request.form.get("date") or "").strip()
@@ -828,6 +841,9 @@ def valider_reservation():
 
     if not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str]):
         return page_erreur("Merci de remplir tous les champs du formulaire.")
+
+    if role == "secretaire" and not nom_infirmiere:
+        return page_erreur("Merci d'indiquer le nom de l'infirmiere.")
 
     # Nom complet utilise partout ensuite (agenda, email, SMS), pour garder
     # exactement la meme mise en forme qu'avant (un seul champ "nom") tout
@@ -849,6 +865,7 @@ def valider_reservation():
         "nom_agenda": nom_pour_agenda,
         "mode_admin": mode_admin,
         "role": role,
+        "nom_infirmiere": nom_infirmiere or None,
         "telephone": telephone,
         "prise_en_charge": prise_en_charge,
         "destination": destination,
