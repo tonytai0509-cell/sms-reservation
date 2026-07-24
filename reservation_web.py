@@ -429,6 +429,16 @@ FORMULAIRE_RESERVATION_HTML = """
     color: #1a1a1a;
   }
   .page { max-width: 480px; margin: 0 auto; }
+  .grille-haut { display: contents; }
+
+  @media (min-width: 720px) {
+    body { padding: 40px 24px 60px; }
+    .page { max-width: 760px; }
+    .grille-haut {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;
+    }
+    .grille-haut .carte { margin-bottom: 0; }
+  }
   .entete {
     display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; padding-top: 4px;
   }
@@ -590,6 +600,7 @@ FORMULAIRE_RESERVATION_HTML = """
   <form method="POST" action="/reserver">
     {% if mode_admin %}<input type="hidden" name="admin_code" value="{{ admin_code }}">{% endif %}
 
+    <div class="grille-haut">
     <div class="carte">
       <div class="section-titre">
         <div class="numero">1</div>
@@ -718,6 +729,7 @@ FORMULAIRE_RESERVATION_HTML = """
                  value="{{ valeurs.get('destination', '') }}" required>
         </div>
       </div>
+    </div>
     </div>
 
     <div class="carte">
