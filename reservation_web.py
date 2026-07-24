@@ -444,9 +444,9 @@ FORMULAIRE_RESERVATION_HTML = """
   }
   .entete p { margin: 0; color: #667; font-size: 13px; }
   .badge-partenaire {
-    display: inline-flex; align-items: center; gap: 5px; margin-top: 10px;
-    background: var(--navy); color: #fff; padding: 5px 12px; border-radius: 20px;
-    font-size: 13px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    margin: 10px auto 0; background: var(--navy); color: #fff; padding: 5px 12px;
+    border-radius: 20px; font-size: 13px; font-weight: 700;
   }
 
   .carte {
@@ -576,7 +576,6 @@ FORMULAIRE_RESERVATION_HTML = """
       <p>{% if role == 'secretaire' %}Reservez le transport de votre patient en quelques instants{% else %}Reservez votre course en quelques instants{% endif %}</p>
       {% if role == 'secretaire' %}
       <div class="badge-partenaire">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Mode partenaire
       </div>
       {% endif %}
