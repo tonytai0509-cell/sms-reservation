@@ -438,6 +438,7 @@ FORMULAIRE_RESERVATION_HTML = """
       display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start;
     }
     .grille-haut .carte { margin-bottom: 0; min-width: 0; }
+    .raccourcis { flex-wrap: wrap; overflow-x: visible; }
   }
   .entete {
     display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; padding-top: 4px;
