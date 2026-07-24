@@ -253,6 +253,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"DEST : {donnees['destination']} | "
         f"RDV : {heure_rdv_aff} {type_tag} | "
         f"TEL : {telephone} | REF : {reference}"
+        + (f" [{donnees['nom_infirmiere']}]" if donnees.get("nom_infirmiere") else "")
     ).upper()
     role = donnees.get("role")
     if role == "admin":
@@ -552,19 +553,19 @@ FORMULAIRE_RESERVATION_HTML = """
     <div class="carte">
       <div class="section-titre">
         <div class="numero">1</div>
-        <h2>Vos coordonnees</h2>
+        <h2>{% if role == 'secretaire' %}Patient{% else %}Vos coordonnees{% endif %}</h2>
       </div>
 
       <div class="ligne-double">
         <div>
-          <label for="prenom">Prenom</label>
+          <label for="prenom">{% if role == 'secretaire' %}Prenom du patient{% else %}Prenom{% endif %}</label>
           <div class="champ-icone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
             <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}" required>
           </div>
         </div>
         <div>
-          <label for="nom">Nom</label>
+          <label for="nom">{% if role == 'secretaire' %}Nom du patient{% else %}Nom{% endif %}</label>
           <div class="champ-icone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
             <input type="text" id="nom" name="nom" value="{{ valeurs.get('nom', '') }}" required>
@@ -572,7 +573,7 @@ FORMULAIRE_RESERVATION_HTML = """
         </div>
       </div>
 
-      <label for="telephone">Telephone</label>
+      <label for="telephone">{% if role == 'secretaire' %}Telephone du patient{% else %}Telephone{% endif %}</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
         <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
