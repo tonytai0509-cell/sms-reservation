@@ -443,6 +443,11 @@ FORMULAIRE_RESERVATION_HTML = """
     font-size: 18px; margin: 0 0 4px; color: var(--navy); font-weight: 800; line-height: 1.2;
   }
   .entete p { margin: 0; color: #667; font-size: 13px; }
+  .badge-partenaire {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    background: var(--navy); color: #fff; padding: 7px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 600;
+  }
 
   .carte {
     background: #ffffff; border-radius: 16px; padding: 20px;
@@ -457,6 +462,21 @@ FORMULAIRE_RESERVATION_HTML = """
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .section-titre h2 { margin: 0; font-size: 16px; color: var(--navy); }
+  .badge-medical {
+    display: inline-flex; align-items: center; gap: 5px; background: var(--vert-clair);
+    color: var(--vert); padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: 700;
+  }
+  .infirmiere-affichage {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 16px; font-size: 14px; color: #444;
+  }
+  .infirmiere-affichage span { display: inline-flex; align-items: center; gap: 6px; color: #667; }
+  .infirmiere-affichage span svg { flex-shrink: 0; color: #8a95a3; }
+  .infirmiere-affichage strong { color: #1a1a1a; }
+  .infirmiere-affichage button {
+    display: inline-flex; align-items: center; gap: 5px; background: none; border: none;
+    color: var(--navy); font-weight: 600; font-size: 13px; cursor: pointer; padding: 4px 6px;
+  }
 
   label {
     display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; color: #333;
@@ -537,7 +557,7 @@ FORMULAIRE_RESERVATION_HTML = """
   .raccourcis button {
     flex-shrink: 0; padding: 8px 13px; border-radius: 20px; border: 1.5px solid var(--bordure);
     background: #fafbfc; font-size: 13px; font-weight: 600; color: #444; cursor: pointer;
-    white-space: nowrap;
+    white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
   }
   .raccourcis button:active { background: #eef2f7; border-color: var(--navy); color: var(--navy); }
 </style>
@@ -549,13 +569,19 @@ FORMULAIRE_RESERVATION_HTML = """
     <img class="photo-agent" src="data:image/jpeg;base64,{{ photo_agent }}" alt="Votre interlocutrice">
     <div class="entete-texte">
       <h1>Centrale des Taxis Nicois</h1>
-      <p>Reservez votre course en quelques instants</p>
+      <p>{% if role == 'secretaire' %}Reservez le transport de votre patient en quelques instants{% else %}Reservez votre course en quelques instants{% endif %}</p>
+      {% if role == 'secretaire' %}
+      <div class="badge-partenaire">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Mode partenaire
+      </div>
+      {% endif %}
     </div>
   </div>
 
   {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
-  {% if mode_admin %}
-    <div class="banniere-admin">{% if role == 'secretaire' %}MODE PARTENAIRE{% else %}MODE ADMINISTRATEUR{% endif %}</div>
+  {% if mode_admin and role != 'secretaire' %}
+    <div class="banniere-admin">MODE ADMINISTRATEUR</div>
   {% endif %}
 
   <form method="POST" action="/reserver">
@@ -571,7 +597,7 @@ FORMULAIRE_RESERVATION_HTML = """
       <label for="patient_nom_complet">Nom et prenom du patient</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
-        <input type="text" id="patient_nom_complet" name="patient_nom_complet"
+        <input type="text" id="patient_nom_complet" name="patient_nom_complet" placeholder="Ex. : Jean Dupont"
                value="{{ valeurs.get('patient_nom_complet', '') }}" required>
       </div>
       {% else %}
@@ -593,7 +619,7 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
       {% endif %}
 
-      <label for="telephone">{% if role == 'secretaire' %}Telephone du patient{% else %}Telephone{% endif %}</label>
+      <label for="telephone">{% if role == 'secretaire' %}Telephone du patient ou ligne directe du service{% else %}Telephone{% endif %}</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
         <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
@@ -601,11 +627,23 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       {% if role == 'secretaire' %}
-      <label for="nom_infirmiere">Nom de la secretaire / infirmiere</label>
-      <div class="champ-icone">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
-        <input type="text" id="nom_infirmiere" name="nom_infirmiere"
-               value="{{ valeurs.get('nom_infirmiere', '') }}" required>
+      <div id="bloc_infirmiere_affichage" class="infirmiere-affichage" style="display:none;">
+        <span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+          Reservation effectuee par : <strong id="nom_infirmiere_affiche"></strong>
+        </span>
+        <button type="button" id="bouton_modifier_infirmiere">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Modifier
+        </button>
+      </div>
+      <div id="bloc_infirmiere_saisie">
+        <label for="nom_infirmiere">Nom de la secretaire / infirmiere</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+          <input type="text" id="nom_infirmiere" name="nom_infirmiere"
+                 value="{{ valeurs.get('nom_infirmiere', '') }}" required>
+        </div>
       </div>
       {% endif %}
     </div>
@@ -613,25 +651,33 @@ FORMULAIRE_RESERVATION_HTML = """
     <div class="carte">
       <div class="section-titre">
         <div class="numero">2</div>
-        <h2>Votre trajet</h2>
+        <h2>{% if role == 'secretaire' %}Trajet{% else %}Votre trajet{% endif %}</h2>
+        {% if role == 'secretaire' %}
+        <span class="badge-medical">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+          Transport medical
+        </span>
+        {% endif %}
       </div>
 
+      {% if role == 'secretaire' %}
+        <input type="hidden" name="type_course" value="medical">
+      {% else %}
       <div class="choix">
-        {% if role != 'secretaire' %}
         <label for="type_prive">
           <input type="radio" id="type_prive" name="type_course" value="prive"
                  {% if valeurs.get('type_course', 'prive') == 'prive' %}checked{% endif %}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>
           Course privee
         </label>
-        {% endif %}
         <label for="type_medical">
           <input type="radio" id="type_medical" name="type_course" value="medical"
-                 {% if role == 'secretaire' or valeurs.get('type_course') == 'medical' %}checked{% endif %}>
+                 {% if valeurs.get('type_course') == 'medical' %}checked{% endif %}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
           Transport medical
         </label>
       </div>
+      {% endif %}
 
       <div class="adresses">
         <label for="prise_en_charge">Adresse de prise en charge</label>
@@ -643,9 +689,13 @@ FORMULAIRE_RESERVATION_HTML = """
         </div>
 
         {% if role == 'secretaire' %}
+        <label style="margin-top: 14px;">Etablissements favoris</label>
         <div class="raccourcis">
           {% for nom_etablissement in ['Les Sources B1', 'Pasteur', "L'Archet", 'Saint-Georges', 'Lenval', 'Antoine Lacassagne', 'Parc Imperial', 'Saint-Antoine', 'Santa Maria', 'Saint-Francois', 'Cimiez', 'Saint Jean', 'Tzanck'] %}
-          <button type="button" onclick="document.getElementById('prise_en_charge').value = '{{ nom_etablissement }}'">{{ nom_etablissement }}</button>
+          <button type="button" onclick="document.getElementById('prise_en_charge').value = '{{ nom_etablissement }}'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M6 21V7l6-4 6 4v14M9 9h1M9 13h1M14 9h1M14 13h1M10 21v-4h4v4"/></svg>
+            {{ nom_etablissement }}
+          </button>
           {% endfor %}
         </div>
         {% endif %}
@@ -750,13 +800,30 @@ FORMULAIRE_RESERVATION_HTML = """
   });
 
   // Memorise le dernier nom de secretaire/infirmiere saisi sur cet appareil,
-  // pour ne pas avoir a le retaper a chaque reservation.
+  // et affiche "Reservation effectuee par : NOM" avec un bouton Modifier
+  // au lieu de faire retaper le champ a chaque fois.
   const champInfirmiere = document.getElementById('nom_infirmiere');
   if (champInfirmiere) {
-    if (!champInfirmiere.value) {
-      const dernierNom = localStorage.getItem('dernier_nom_infirmiere');
-      if (dernierNom) { champInfirmiere.value = dernierNom; }
+    const blocAffichage = document.getElementById('bloc_infirmiere_affichage');
+    const blocSaisie = document.getElementById('bloc_infirmiere_saisie');
+    const nomAffiche = document.getElementById('nom_infirmiere_affiche');
+    const boutonModifier = document.getElementById('bouton_modifier_infirmiere');
+    const dernierNom = localStorage.getItem('dernier_nom_infirmiere');
+
+    if (!champInfirmiere.value && dernierNom) {
+      champInfirmiere.value = dernierNom;
+      nomAffiche.textContent = dernierNom;
+      blocAffichage.style.display = 'flex';
+      blocSaisie.style.display = 'none';
     }
+
+    boutonModifier.addEventListener('click', function () {
+      blocAffichage.style.display = 'none';
+      blocSaisie.style.display = 'block';
+      champInfirmiere.focus();
+      champInfirmiere.select();
+    });
+
     formulaire.addEventListener('submit', function () {
       if (champInfirmiere.value) {
         localStorage.setItem('dernier_nom_infirmiere', champInfirmiere.value);
