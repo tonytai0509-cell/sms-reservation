@@ -65,6 +65,24 @@ MAX_RESERVATIONS_ACTIVES = int(os.environ.get("MAX_RESERVATIONS_ACTIVES", "5"))
 # en ajoutant une variable ADMIN_ACCESS_CODE sur Railway pour ce service.
 ADMIN_ACCESS_CODE = os.environ.get("ADMIN_ACCESS_CODE", "kelly-admin-2026")
 
+# Code secret partage pour les secretaires (voir /reserver?admin=CE_CODE).
+# Meme comportement que le mode admin (aucun SMS/email envoye au client),
+# mais code different pour ne pas partager le code personnel de Tony.
+# Changez-le via une variable SECRETAIRE_ACCESS_CODE sur Railway.
+SECRETAIRE_ACCESS_CODE = os.environ.get("SECRETAIRE_ACCESS_CODE", "kelly-secretaire-2026")
+
+
+def determiner_role(code_saisi: str | None) -> str | None:
+    """Renvoie 'admin', 'secretaire' ou None selon le code fourni dans
+    l'URL (?admin=...) ou le champ cache du formulaire."""
+    if not code_saisi:
+        return None
+    if code_saisi == ADMIN_ACCESS_CODE:
+        return "admin"
+    if code_saisi == SECRETAIRE_ACCESS_CODE:
+        return "secretaire"
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Aide a l'adressage (memes tables que le bot SMS, dupliquees ici pour que
@@ -236,13 +254,21 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"RDV : {heure_rdv_aff} {type_tag} | "
         f"TEL : {telephone} | REF : {reference}"
     ).upper()
+    role = donnees.get("role")
+    if role == "admin":
+        source_label = "reservation prise par Tony (admin)"
+    elif role == "secretaire":
+        source_label = "reservation prise par une/un secretaire"
+    else:
+        source_label = "reservation en ligne (client)"
+
     description = (
         f"REF : {reference}\n"
         f"PC : {donnees['prise_en_charge']}\n"
         f"DEST : {donnees['destination']}\n"
         f"RDV : {heure_rdv_aff} {type_tag}\n"
         f"TEL : {telephone}\n"
-        f"SOURCE : reservation en ligne"
+        f"SOURCE : {source_label}"
         + ("\nRAPPEL : NON" if donnees.get("mode_admin") else "")
     ).upper()
 
@@ -516,7 +542,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
   {% if erreur %}<div class="erreur">{{ erreur }}</div>{% endif %}
   {% if mode_admin %}
-    <div class="banniere-admin">MODE ADMINISTRATEUR</div>
+    <div class="banniere-admin">{% if role == 'secretaire' %}MODE SECRETAIRE{% else %}MODE ADMINISTRATEUR{% endif %}</div>
   {% endif %}
 
   <form method="POST" action="/reserver">
@@ -735,7 +761,7 @@ CONFIRMATION_RESERVATION_HTML = """
     <div class="ref">Reference : {{ reference }}</div>
     {% if mode_admin %}
     <p style="font-size:13px;color:#0d2a52;margin-top:14px;font-weight:600;">
-      Ajoutee a l'agenda -- mode admin, aucun SMS envoye au client.
+      Ajoutee a l'agenda -- {% if role == 'secretaire' %}mode secretaire{% else %}mode admin{% endif %}, aucun SMS envoye au client.
     </p>
     {% else %}
     <p style="font-size:13px;color:#a30000;margin-top:14px;font-weight:600;">
@@ -765,10 +791,12 @@ def racine():
 @app.route("/reserver", methods=["GET"])
 def page_reservation():
     date_min = datetime.now(FUSEAU_HORAIRE).strftime("%Y-%m-%d")
-    mode_admin = request.args.get("admin") == ADMIN_ACCESS_CODE
+    code_saisi = request.args.get("admin")
+    role = determiner_role(code_saisi)
     return render_template_string(
         FORMULAIRE_RESERVATION_HTML, erreur=None, date_min=date_min, valeurs={},
-        photo_agent=PHOTO_AGENT_B64, mode_admin=mode_admin, admin_code=ADMIN_ACCESS_CODE,
+        photo_agent=PHOTO_AGENT_B64, mode_admin=(role is not None), role=role,
+        admin_code=code_saisi if role else "",
     )
 
 
@@ -776,12 +804,15 @@ def page_reservation():
 def valider_reservation():
     date_min = datetime.now(FUSEAU_HORAIRE).strftime("%Y-%m-%d")
     valeurs = request.form.to_dict()
-    mode_admin = request.form.get("admin_code") == ADMIN_ACCESS_CODE
+    code_saisi = request.form.get("admin_code")
+    role = determiner_role(code_saisi)
+    mode_admin = role is not None
 
     def page_erreur(message: str):
         return render_template_string(
             FORMULAIRE_RESERVATION_HTML, erreur=message, date_min=date_min, valeurs=valeurs,
-            photo_agent=PHOTO_AGENT_B64, mode_admin=mode_admin, admin_code=ADMIN_ACCESS_CODE,
+            photo_agent=PHOTO_AGENT_B64, mode_admin=mode_admin, role=role,
+            admin_code=code_saisi if role else "",
         )
 
     prenom = (request.form.get("prenom") or "").strip()
@@ -817,6 +848,7 @@ def valider_reservation():
         "nom": nom_complet,
         "nom_agenda": nom_pour_agenda,
         "mode_admin": mode_admin,
+        "role": role,
         "telephone": telephone,
         "prise_en_charge": prise_en_charge,
         "destination": destination,
@@ -906,7 +938,7 @@ def valider_reservation():
             )
             return render_template_string(
                 CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference_existante,
-                mode_admin=mode_admin, admin_code=ADMIN_ACCESS_CODE,
+                mode_admin=mode_admin, role=role, admin_code=code_saisi if role else "",
             )
 
     reference = generer_reference()
@@ -936,7 +968,7 @@ def valider_reservation():
 
     return render_template_string(
         CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference, mode_admin=mode_admin,
-        admin_code=ADMIN_ACCESS_CODE
+        role=role, admin_code=code_saisi if role else "",
     )
 
 
