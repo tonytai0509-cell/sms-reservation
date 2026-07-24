@@ -444,14 +444,14 @@ FORMULAIRE_RESERVATION_HTML = """
   }
   .entete p { margin: 0; color: #667; font-size: 13px; }
   .badge-partenaire {
-    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
-    background: var(--navy); color: #fff; padding: 7px 14px; border-radius: 20px;
-    font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 10px;
+    background: var(--navy); color: #fff; padding: 5px 12px; border-radius: 20px;
+    font-size: 13px; font-weight: 700;
   }
 
   .carte {
-    background: #ffffff; border-radius: 16px; padding: 20px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin-bottom: 14px;
+    background: #ffffff; border-radius: 16px; padding: 20px 20px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin-bottom: 12px;
   }
   .section-titre {
     display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
@@ -467,15 +467,19 @@ FORMULAIRE_RESERVATION_HTML = """
     color: var(--vert); padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: 700;
   }
   .infirmiere-affichage {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    margin-top: 16px; font-size: 14px; color: #444;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-top: 16px; font-size: 13px; color: #444; flex-wrap: nowrap;
   }
-  .infirmiere-affichage span { display: inline-flex; align-items: center; gap: 6px; color: #667; }
+  .infirmiere-affichage span {
+    display: inline-flex; align-items: center; gap: 6px; color: #667;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
   .infirmiere-affichage span svg { flex-shrink: 0; color: #8a95a3; }
   .infirmiere-affichage strong { color: #1a1a1a; }
   .infirmiere-affichage button {
     display: inline-flex; align-items: center; gap: 5px; background: none; border: none;
     color: var(--navy); font-weight: 600; font-size: 13px; cursor: pointer; padding: 4px 6px;
+    flex-shrink: 0;
   }
 
   label {
@@ -572,7 +576,7 @@ FORMULAIRE_RESERVATION_HTML = """
       <p>{% if role == 'secretaire' %}Reservez le transport de votre patient en quelques instants{% else %}Reservez votre course en quelques instants{% endif %}</p>
       {% if role == 'secretaire' %}
       <div class="badge-partenaire">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Mode partenaire
       </div>
       {% endif %}
@@ -594,7 +598,7 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       {% if role == 'secretaire' %}
-      <label for="patient_nom_complet">Nom et prenom du patient</label>
+      <label for="patient_nom_complet">Nom et prénom du patient</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
         <input type="text" id="patient_nom_complet" name="patient_nom_complet" placeholder="Ex. : Jean Dupont"
@@ -619,7 +623,10 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
       {% endif %}
 
-      <label for="telephone">{% if role == 'secretaire' %}Telephone du patient ou ligne directe du service{% else %}Telephone{% endif %}</label>
+      <label for="telephone">{% if role == 'secretaire' %}Telephone de contact{% else %}Telephone{% endif %}</label>
+      {% if role == 'secretaire' %}
+      <p style="margin: -4px 0 6px; font-size: 12px; color: #999;">Patient ou service</p>
+      {% endif %}
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
         <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
@@ -630,7 +637,7 @@ FORMULAIRE_RESERVATION_HTML = """
       <div id="bloc_infirmiere_affichage" class="infirmiere-affichage" style="display:none;">
         <span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
-          Reservation effectuee par : <strong id="nom_infirmiere_affiche"></strong>
+          Reservation par : <strong id="nom_infirmiere_affiche"></strong>
         </span>
         <button type="button" id="bouton_modifier_infirmiere">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -750,7 +757,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
     <button type="submit" class="envoyer">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>
-      Confirmer ma reservation
+      Reserver la course
     </button>
   </form>
 
