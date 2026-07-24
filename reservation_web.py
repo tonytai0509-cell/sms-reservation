@@ -748,6 +748,21 @@ FORMULAIRE_RESERVATION_HTML = """
     boutonEnvoi.disabled = true;
     boutonEnvoi.textContent = 'Envoi en cours...';
   });
+
+  // Memorise le dernier nom de secretaire/infirmiere saisi sur cet appareil,
+  // pour ne pas avoir a le retaper a chaque reservation.
+  const champInfirmiere = document.getElementById('nom_infirmiere');
+  if (champInfirmiere) {
+    if (!champInfirmiere.value) {
+      const dernierNom = localStorage.getItem('dernier_nom_infirmiere');
+      if (dernierNom) { champInfirmiere.value = dernierNom; }
+    }
+    formulaire.addEventListener('submit', function () {
+      if (champInfirmiere.value) {
+        localStorage.setItem('dernier_nom_infirmiere', champInfirmiere.value);
+      }
+    });
+  }
 </script>
 </body>
 </html>
