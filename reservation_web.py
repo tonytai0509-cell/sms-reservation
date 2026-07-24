@@ -529,6 +529,17 @@ FORMULAIRE_RESERVATION_HTML = """
     background: #0d2a52; color: #fff; padding: 10px 14px; border-radius: 10px;
     font-size: 13px; margin-bottom: 14px; text-align: center; font-weight: 600;
   }
+  .raccourcis {
+    display: flex; gap: 8px; overflow-x: auto; margin: 8px 0 4px; padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .raccourcis::-webkit-scrollbar { height: 4px; }
+  .raccourcis button {
+    flex-shrink: 0; padding: 8px 13px; border-radius: 20px; border: 1.5px solid var(--bordure);
+    background: #fafbfc; font-size: 13px; font-weight: 600; color: #444; cursor: pointer;
+    white-space: nowrap;
+  }
+  .raccourcis button:active { background: #eef2f7; border-color: var(--navy); color: var(--navy); }
 </style>
 </head>
 <body>
@@ -556,22 +567,31 @@ FORMULAIRE_RESERVATION_HTML = """
         <h2>{% if role == 'secretaire' %}Patient{% else %}Vos coordonnees{% endif %}</h2>
       </div>
 
+      {% if role == 'secretaire' %}
+      <label for="patient_nom_complet">Nom et prenom du patient</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+        <input type="text" id="patient_nom_complet" name="patient_nom_complet"
+               value="{{ valeurs.get('patient_nom_complet', '') }}" required>
+      </div>
+      {% else %}
       <div class="ligne-double">
         <div>
-          <label for="prenom">{% if role == 'secretaire' %}Prenom du patient{% else %}Prenom{% endif %}</label>
+          <label for="prenom">Prenom</label>
           <div class="champ-icone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
             <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}" required>
           </div>
         </div>
         <div>
-          <label for="nom">{% if role == 'secretaire' %}Nom du patient{% else %}Nom{% endif %}</label>
+          <label for="nom">Nom</label>
           <div class="champ-icone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
             <input type="text" id="nom" name="nom" value="{{ valeurs.get('nom', '') }}" required>
           </div>
         </div>
       </div>
+      {% endif %}
 
       <label for="telephone">{% if role == 'secretaire' %}Telephone du patient{% else %}Telephone{% endif %}</label>
       <div class="champ-icone">
@@ -621,6 +641,14 @@ FORMULAIRE_RESERVATION_HTML = """
                  placeholder="Ex : 12 avenue de la Republique, Nice"
                  value="{{ valeurs.get('prise_en_charge', '') }}" required>
         </div>
+
+        {% if role == 'secretaire' %}
+        <div class="raccourcis">
+          {% for nom_etablissement in ['Les Sources B1', 'Pasteur', "L'Archet", 'Saint-Georges', 'Lenval', 'Antoine Lacassagne', 'Parc Imperial', 'Saint-Antoine', 'Santa Maria', 'Saint-Francois', 'Cimiez', 'Saint Jean', 'Tzanck'] %}
+          <button type="button" onclick="document.getElementById('prise_en_charge').value = '{{ nom_etablissement }}'">{{ nom_etablissement }}</button>
+          {% endfor %}
+        </div>
+        {% endif %}
 
         <button type="button" class="bouton-inverser" id="bouton_inverser" aria-label="Inverser les adresses" style="top: 78px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v14M4 13l4 4 4-4"/><path d="M16 21V7M12 11l4-4 4 4"/></svg>
@@ -830,6 +858,7 @@ def valider_reservation():
 
     prenom = (request.form.get("prenom") or "").strip()
     nom = (request.form.get("nom") or "").strip()
+    patient_nom_complet = (request.form.get("patient_nom_complet") or "").strip()
     telephone_saisi = (request.form.get("telephone") or "").strip()
     type_course = "medical" if role == "secretaire" else (request.form.get("type_course") or "prive")
     nom_infirmiere = (request.form.get("nom_infirmiere") or "").strip()
@@ -840,18 +869,25 @@ def valider_reservation():
     heure_pc_saisie = (request.form.get("heure_pc") or "").strip()
     heure_inconnue = request.form.get("heure_inconnue") == "oui"
 
-    if not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str]):
+    if role == "secretaire":
+        if not all([patient_nom_complet, telephone_saisi, prise_en_charge, destination, date_str]):
+            return page_erreur("Merci de remplir tous les champs du formulaire.")
+    elif not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str]):
         return page_erreur("Merci de remplir tous les champs du formulaire.")
 
     if role == "secretaire" and not nom_infirmiere:
         return page_erreur("Merci d'indiquer le nom de la secretaire ou de l'infirmiere.")
 
-    # Nom complet utilise partout ensuite (agenda, email, SMS), pour garder
-    # exactement la meme mise en forme qu'avant (un seul champ "nom") tout
-    # en affichant le prenom en plus.
-    nom_complet = f"{prenom} {nom}".strip()
-    # Format specifique pour l'agenda : NOM avant Prenom.
-    nom_pour_agenda = f"{nom} {prenom}".strip()
+    # Nom complet utilise partout ensuite (agenda, email, SMS). En mode
+    # secretaire, un seul champ "nom et prenom du patient" est saisi ; sinon
+    # on garde prenom + nom separes comme avant.
+    if role == "secretaire":
+        nom_complet = patient_nom_complet
+        nom_pour_agenda = patient_nom_complet
+    else:
+        nom_complet = f"{prenom} {nom}".strip()
+        # Format specifique pour l'agenda : NOM avant Prenom.
+        nom_pour_agenda = f"{nom} {prenom}".strip()
 
     telephone = normaliser_numero_francais(telephone_saisi)
 
@@ -975,7 +1011,7 @@ def valider_reservation():
             envoyer_email_confirmation(donnees, reference)
         log.info(
             "Reservation %s creee : %s (ref %s, tel %s, event %s) -- pas de SMS envoye",
-            (role or "admin").upper(), nom, reference, telephone, event_id,
+            (role or "admin").upper(), nom_complet, reference, telephone, event_id,
         )
     else:
         envoyer_email_confirmation(donnees, reference)
@@ -983,7 +1019,7 @@ def valider_reservation():
         envoyer_sms(telephone, texte_sms)
         log.info(
             "Reservation web creee : %s (ref %s, tel %s, event %s)",
-            nom, reference, telephone, event_id,
+            nom_complet, reference, telephone, event_id,
         )
 
     return render_template_string(
