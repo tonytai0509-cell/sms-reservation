@@ -254,6 +254,8 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"RDV : {heure_rdv_aff} {type_tag} | "
         f"TEL : {telephone} | REF : {reference}"
         + (f" [{donnees['nom_infirmiere']}]" if donnees.get("nom_infirmiere") else "")
+        + (" [ACCOMPAGNANT]" if donnees.get("accompagnant") else "")
+        + (" [BT AU RETOUR]" if donnees.get("bto_retour") else "")
     ).upper()
     role = donnees.get("role")
     if role == "admin":
@@ -271,6 +273,8 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"TEL : {telephone}\n"
         f"SOURCE : {source_label}"
         + (f"\nINFIRMIERE : {donnees['nom_infirmiere']}" if donnees.get("nom_infirmiere") else "")
+        + ("\nACCOMPAGNANT : OUI" if donnees.get("accompagnant") else "")
+        + ("\nBT : AU RETOUR UNIQUEMENT" if donnees.get("bto_retour") else "")
         + ("\nRAPPEL : NON" if donnees.get("mode_admin") else "")
     ).upper()
 
@@ -693,6 +697,19 @@ FORMULAIRE_RESERVATION_HTML = """
           Transport medical
         </label>
       </div>
+
+      <div id="options_medical" class="options-medical" style="display: {% if valeurs.get('type_course') == 'medical' %}block{% else %}none{% endif %};">
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; margin:10px 0 0;">
+          <input type="checkbox" id="accompagnant" name="accompagnant" value="oui" style="width:auto;"
+                 {% if valeurs.get('accompagnant') %}checked{% endif %}>
+          J'aurai un accompagnant avec moi
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; margin:8px 0 0;">
+          <input type="checkbox" id="bto_retour" name="bto_retour" value="oui" style="width:auto;"
+                 {% if valeurs.get('bto_retour') %}checked{% endif %}>
+          Bon de transport uniquement au retour (pas a l'aller)
+        </label>
+      </div>
       {% endif %}
 
       <div class="adresses">
@@ -808,6 +825,19 @@ FORMULAIRE_RESERVATION_HTML = """
     pc.value = dest.value;
     dest.value = temp;
   });
+
+  // Affiche les options specifiques au transport medical (accompagnant,
+  // bon de transport retour) uniquement quand ce type est selectionne.
+  const radioPrive = document.getElementById('type_prive');
+  const radioMedical = document.getElementById('type_medical');
+  const optionsMedical = document.getElementById('options_medical');
+  if (radioPrive && radioMedical && optionsMedical) {
+    function majOptionsMedical() {
+      optionsMedical.style.display = radioMedical.checked ? 'block' : 'none';
+    }
+    radioPrive.addEventListener('change', majOptionsMedical);
+    radioMedical.addEventListener('change', majOptionsMedical);
+  }
 
   // Empeche les doubles reservations en cas de double-clic ou d'appui
   // rapide sur le bouton "Confirmer ma reservation".
@@ -962,6 +992,8 @@ def valider_reservation():
     patient_nom_complet = (request.form.get("patient_nom_complet") or "").strip()
     telephone_saisi = (request.form.get("telephone") or "").strip()
     type_course = "medical" if role == "secretaire" else (request.form.get("type_course") or "prive")
+    accompagnant = request.form.get("accompagnant") == "oui"
+    bto_retour = request.form.get("bto_retour") == "oui"
     nom_infirmiere = (request.form.get("nom_infirmiere") or "").strip()
     prise_en_charge = (request.form.get("prise_en_charge") or "").strip()
     destination = (request.form.get("destination") or "").strip()
@@ -1004,6 +1036,8 @@ def valider_reservation():
         "mode_admin": mode_admin,
         "role": role,
         "nom_infirmiere": nom_infirmiere or None,
+        "accompagnant": accompagnant,
+        "bto_retour": bto_retour,
         "telephone": telephone,
         "prise_en_charge": prise_en_charge,
         "destination": destination,
