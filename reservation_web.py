@@ -699,15 +699,15 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       <div id="options_medical" class="options-medical" style="display: {% if valeurs.get('type_course') == 'medical' %}block{% else %}none{% endif %};">
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; margin:10px 0 0;">
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:#777; margin:10px 0 0;">
           <input type="checkbox" id="accompagnant" name="accompagnant" value="oui" style="width:auto;"
                  {% if valeurs.get('accompagnant') %}checked{% endif %}>
           J'aurai un accompagnant avec moi
         </label>
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; margin:8px 0 0;">
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:#777; margin:8px 0 0;">
           <input type="checkbox" id="bto_retour" name="bto_retour" value="oui" style="width:auto;"
                  {% if valeurs.get('bto_retour') %}checked{% endif %}>
-          Bon de transport uniquement au retour (pas a l'aller)
+          Je donnerai mon bon de transport au retour
         </label>
       </div>
       {% endif %}
