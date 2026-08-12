@@ -462,6 +462,11 @@ FORMULAIRE_RESERVATION_HTML = """
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
     margin: 10px auto 0; background: var(--navy); color: #fff; padding: 5px 12px;
     border-radius: 20px; font-size: 13px; font-weight: 700;
+    animation: pulsation-douce 2.6s ease-in-out infinite;
+  }
+  @keyframes pulsation-douce {
+    0%, 100% { box-shadow: 0 0 0 rgba(13, 42, 82, 0); }
+    50% { box-shadow: 0 0 14px rgba(13, 42, 82, 0.45); }
   }
 
   .carte {
@@ -515,7 +520,11 @@ FORMULAIRE_RESERVATION_HTML = """
     width: 100%; padding: 13px 14px; font-size: 16px; border: 1.5px solid var(--bordure);
     border-radius: 10px; background: #fafbfc;
   }
-  input:focus { outline: none; border-color: var(--navy); }
+  input:focus {
+    outline: none; border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(13, 42, 82, 0.15), 0 0 12px rgba(13, 42, 82, 0.25);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
   input::placeholder { font-size: 14px; }
 
   .ligne-double { display: flex; gap: 10px; }
@@ -551,8 +560,10 @@ FORMULAIRE_RESERVATION_HTML = """
     width: 100%; margin-top: 4px; padding: 16px; font-size: 17px; font-weight: 700;
     background: var(--navy); color: #fff; border: none; border-radius: 12px; cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: 0 0 16px rgba(13, 42, 82, 0.35);
+    transition: box-shadow 0.2s ease, background 0.15s ease;
   }
-  button.envoyer:active { background: var(--navy-dark); }
+  button.envoyer:active { background: var(--navy-dark); box-shadow: 0 0 24px rgba(13, 42, 82, 0.55); }
   button.envoyer:disabled { opacity: 0.7; }
 
   .pied {
@@ -568,6 +579,7 @@ FORMULAIRE_RESERVATION_HTML = """
   .banniere-admin {
     background: #0d2a52; color: #fff; padding: 10px 14px; border-radius: 10px;
     font-size: 13px; margin-bottom: 14px; text-align: center; font-weight: 600;
+    animation: pulsation-douce 2.6s ease-in-out infinite;
   }
   .raccourcis {
     display: flex; gap: 8px; overflow-x: auto; margin: 8px 0 4px; padding-bottom: 2px;
