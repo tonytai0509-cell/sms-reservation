@@ -364,9 +364,9 @@ FORMULAIRE_RESERVATION_HTML = """
   }
 
   /* ---------- En-tete ---------- */
-  .entete { text-align: center; padding-top: 4px; margin-bottom: 18px; }
+  .entete { text-align: center; padding-top: 0; margin-bottom: 18px; }
   .entete .logo-aigle {
-    width: 76px; height: 76px; object-fit: contain; margin: 0 auto 6px; display: block;
+    width: 76px; height: 76px; object-fit: contain; margin: 0 auto 2px; display: block;
   }
   .entete h1 {
     font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
@@ -375,16 +375,16 @@ FORMULAIRE_RESERVATION_HTML = """
     color: var(--rouge);
     background: linear-gradient(
       90deg,
-      var(--rouge-fonce) 0%, var(--rouge) 20%, #FF7A6B 50%, var(--rouge) 80%, var(--rouge-fonce) 100%
+      var(--rouge-fonce) 0%, var(--rouge) 20%, #FF9284 50%, var(--rouge) 80%, var(--rouge-fonce) 100%
     );
     background-size: 180% auto;
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 2px rgba(179,38,32,0.5), 0 0 7px rgba(179,38,32,0.28), 0 0 14px rgba(179,38,32,0.14);
+    text-shadow: 0 0 3px rgba(179,38,32,0.75), 0 0 9px rgba(179,38,32,0.5), 0 0 18px rgba(179,38,32,0.3);
     animation: neon-balayage 8s linear infinite;
   }
   @keyframes neon-balayage {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 180% 50%; }
+    0% { background-position: 180% 50%; }
+    100% { background-position: 0% 50%; }
   }
   @media (prefers-reduced-motion: reduce) {
     .entete h1 { animation: none; }
@@ -549,7 +549,7 @@ FORMULAIRE_RESERVATION_HTML = """
           <label for="prenom">Prenom</label>
           <div class="champ-icone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
-            <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}" required>
+            <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}">
           </div>
         </div>
         <div>
@@ -954,7 +954,7 @@ def valider_reservation():
             return page_erreur("Merci de remplir tous les champs du formulaire.")
         if not nom_infirmiere:
             return page_erreur("Merci d'indiquer le nom de la secretaire ou de l'infirmiere.")
-    elif not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str]):
+    elif not all([nom, telephone_saisi, prise_en_charge, destination, date_str]):
         return page_erreur("Merci de remplir tous les champs du formulaire.")
 
     prix_min = None
