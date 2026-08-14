@@ -529,6 +529,8 @@ FORMULAIRE_RESERVATION_HTML = """
 
   .ligne-double { display: flex; gap: 10px; }
   .ligne-double > div { flex: 1; }
+  .ligne-double-souple { display: flex; flex-wrap: wrap; gap: 10px; }
+  .ligne-double-souple > div { flex: 1 1 140px; min-width: 140px; }
 
   .choix { display: flex; gap: 10px; margin: 6px 0 4px; }
   .choix label {
@@ -592,6 +594,55 @@ FORMULAIRE_RESERVATION_HTML = """
     white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
   }
   .raccourcis button:active { background: #eef2f7; border-color: var(--navy); color: var(--navy); }
+
+  /* --- Nouveaux styles page publique (client) uniquement --- */
+  .badge-mode {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    padding: 6px 13px; border-radius: 20px; font-size: 13px; font-weight: 700;
+    border: 1.5px solid transparent;
+  }
+  .badge-mode-prive { background: #eef2f7; color: var(--navy); border-color: #d5deea; }
+  .badge-mode-medical { background: var(--vert-clair); color: var(--vert); border-color: #cdeed9; }
+  .badge-mode svg { flex-shrink: 0; }
+
+  .choix-client { display: flex; gap: 10px; margin: 6px 0 4px; }
+  .choix-client label {
+    flex: 1; margin: 0; display: flex; align-items: center; gap: 8px;
+    padding: 12px 12px; border: 1.5px solid var(--bordure);
+    border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; color: #444;
+  }
+  .choix-client input { display: none; }
+  .choix-client label svg.icone-transport { flex-shrink: 0; }
+  .choix-client .choix-texte { flex: 1; }
+  .choix-client .choix-coche {
+    display: none; width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+    align-items: center; justify-content: center; color: #fff;
+  }
+  .choix-client label:has(#type_prive:checked) {
+    border-color: var(--navy); background: #eef2f7; color: var(--navy);
+  }
+  .choix-client label:has(#type_prive:checked) .choix-coche { display: inline-flex; background: var(--navy); }
+  .choix-client label:has(#type_medical:checked) {
+    border-color: var(--vert); background: var(--vert-clair); color: var(--vert);
+  }
+  .choix-client label:has(#type_medical:checked) .choix-coche { display: inline-flex; background: var(--vert); }
+
+  .switch-option {
+    display: flex; align-items: center; gap: 10px; margin-top: 12px;
+    font-size: 14px; color: #444; cursor: pointer;
+  }
+  .switch-option input { display: none; }
+  .switch-track {
+    width: 38px; height: 22px; border-radius: 20px; background: #dde2e8;
+    position: relative; flex-shrink: 0; transition: background 0.2s ease;
+  }
+  .switch-thumb {
+    position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: transform 0.2s ease;
+  }
+  .switch-option input:checked ~ .switch-track { background: var(--vert); }
+  .switch-option input:checked ~ .switch-track .switch-thumb { transform: translateX(16px); }
+  .switch-option svg.icone-switch { color: var(--vert); flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -600,11 +651,23 @@ FORMULAIRE_RESERVATION_HTML = """
   <div class="entete">
     <img class="photo-agent" src="data:image/jpeg;base64,{{ photo_agent }}" alt="Votre interlocutrice">
     <div class="entete-texte">
-      <h1>Centrale des Taxis Nicois</h1>
-      <p>{% if role == 'secretaire' %}Reservez le transport de votre patient en quelques instants{% else %}Reservez votre course en quelques instants{% endif %}</p>
+      <h1>Centrale des Taxis Niçois</h1>
       {% if role == 'secretaire' %}
-      <div class="badge-partenaire">
-        Mode partenaire
+      <p>Réservez le transport de votre patient en quelques instants</p>
+      <div class="badge-partenaire">Mode partenaire</div>
+      {% elif mode_admin %}
+      <p>Réservez votre course en quelques instants</p>
+      {% else %}
+      <p id="soustitre_dynamique">{% if valeurs.get('type_course') == 'medical' %}Votre transport médical en toute sérénité{% else %}Réservez votre course en quelques instants{% endif %}</p>
+      <div id="badge_mode" class="badge-mode {% if valeurs.get('type_course') == 'medical' %}badge-mode-medical{% else %}badge-mode-prive{% endif %}">
+        <span id="badge_mode_icone" style="display:inline-flex;">
+          {% if valeurs.get('type_course') == 'medical' %}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v6M9 11h6"/></svg>
+          {% else %}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          {% endif %}
+        </span>
+        <span id="badge_mode_texte">{% if valeurs.get('type_course') == 'medical' %}Conventionné • Disponible 24h/24{% else %}Disponible 24h/24{% endif %}</span>
       </div>
       {% endif %}
     </div>
@@ -635,7 +698,7 @@ FORMULAIRE_RESERVATION_HTML = """
       {% else %}
       <div class="ligne-double">
         <div>
-          <label for="prenom">Prenom</label>
+          <label for="prenom">Prénom</label>
           <div class="champ-icone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
             <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}" required>
@@ -651,7 +714,7 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
       {% endif %}
 
-      <label for="telephone">{% if role == 'secretaire' %}Telephone de contact{% else %}Telephone{% endif %}</label>
+      <label for="telephone">{% if role == 'secretaire' %}Telephone de contact{% else %}Téléphone{% endif %}</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
         <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
@@ -694,7 +757,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
       {% if role == 'secretaire' %}
         <input type="hidden" name="type_course" value="medical">
-      {% else %}
+      {% elif mode_admin %}
       <div class="choix">
         <label for="type_prive">
           <input type="radio" id="type_prive" name="type_course" value="prive"
@@ -720,6 +783,44 @@ FORMULAIRE_RESERVATION_HTML = """
           <input type="checkbox" id="bto_retour" name="bto_retour" value="oui" style="width:auto;"
                  {% if valeurs.get('bto_retour') %}checked{% endif %}>
           Je donnerai mon bon de transport au retour
+        </label>
+      </div>
+      {% else %}
+      <div class="choix-client">
+        <label for="type_prive">
+          <svg class="icone-transport" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>
+          <span class="choix-texte">Course privée</span>
+          <span class="choix-coche">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <input type="radio" id="type_prive" name="type_course" value="prive"
+                 {% if valeurs.get('type_course', 'prive') == 'prive' %}checked{% endif %}>
+        </label>
+        <label for="type_medical">
+          <svg class="icone-transport" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+          <span class="choix-texte">Transport médical</span>
+          <span class="choix-coche">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <input type="radio" id="type_medical" name="type_course" value="medical"
+                 {% if valeurs.get('type_course') == 'medical' %}checked{% endif %}>
+        </label>
+      </div>
+
+      <div id="options_medical" class="options-medical" style="display: {% if valeurs.get('type_course') == 'medical' %}block{% else %}none{% endif %};">
+        <label class="switch-option" for="accompagnant">
+          <input type="checkbox" id="accompagnant" name="accompagnant" value="oui"
+                 {% if valeurs.get('accompagnant') %}checked{% endif %}>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <svg class="icone-switch" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+          Je voyage avec un accompagnant
+        </label>
+        <label class="switch-option" for="bto_retour">
+          <input type="checkbox" id="bto_retour" name="bto_retour" value="oui"
+                 {% if valeurs.get('bto_retour') %}checked{% endif %}>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <svg class="icone-switch" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+          Je remettrai mon bon de transport au retour
         </label>
       </div>
       {% endif %}
@@ -749,11 +850,17 @@ FORMULAIRE_RESERVATION_HTML = """
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v14M4 13l4 4 4-4"/><path d="M16 21V7M12 11l4-4 4 4"/></svg>
         </button>
 
-        <label for="destination">Destination</label>
+        <label for="destination" id="destination_label_texte">{% if not mode_admin and role != 'secretaire' and valeurs.get('type_course') == 'medical' %}Établissement ou destination{% else %}Destination{% endif %}</label>
         <div class="champ-icone">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          <span id="destination_icone" style="display:inline-flex;">
+            {% if not mode_admin and role != 'secretaire' and valeurs.get('type_course') == 'medical' %}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><path d="M12 7v6M9 10h6"/></svg>
+            {% else %}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            {% endif %}
+          </span>
           <input type="text" id="destination" name="destination"
-                 placeholder="Ex : Aeroport de Nice"
+                 placeholder="{% if not mode_admin and role != 'secretaire' and valeurs.get('type_course') == 'medical' %}Ex : Hopital Pasteur 2{% else %}Ex : Aeroport de Nice{% endif %}"
                  value="{{ valeurs.get('destination', '') }}" required>
         </div>
       </div>
@@ -766,17 +873,22 @@ FORMULAIRE_RESERVATION_HTML = """
         <h2>Date et horaire</h2>
       </div>
 
-      <label for="date">Date du trajet</label>
-      <div class="champ-icone">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
-        <input type="date" id="date" name="date" min="{{ date_min }}"
-               value="{{ valeurs.get('date', '') }}" required>
-      </div>
-
-      <label for="heure_rdv">Heure de rendez-vous</label>
-      <div class="champ-icone">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
+      <div class="ligne-double-souple">
+        <div>
+          <label for="date">Date du trajet</label>
+          <div class="champ-icone">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+            <input type="date" id="date" name="date" min="{{ date_min }}"
+                   value="{{ valeurs.get('date', '') }}" required>
+          </div>
+        </div>
+        <div>
+          <label for="heure_rdv">Heure de rendez-vous</label>
+          <div class="champ-icone">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
+          </div>
+        </div>
       </div>
 
       <label for="heure_pc">Heure de prise en charge</label>
@@ -785,18 +897,17 @@ FORMULAIRE_RESERVATION_HTML = """
         <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}">
       </div>
 
-      <div class="case-auto">
+      <label class="switch-option" for="heure_inconnue" style="margin-top:14px;">
         <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
                {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
-        <label for="heure_inconnue" style="margin:0; font-weight:400; color:#555;">
-          Laissez la centrale calculer mon heure de prise en charge automatiquement selon le trajet.
-        </label>
-      </div>
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+        Calcul automatique de l'heure de prise en charge
+      </label>
     </div>
 
     <button type="submit" class="envoyer">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>
-      Reserver la course
+      <span id="bouton_texte">{% if not mode_admin and role != 'secretaire' and valeurs.get('type_course') == 'medical' %}Réserver mon transport{% else %}Réserver la course{% endif %}</span>
     </button>
   </form>
 
@@ -840,15 +951,55 @@ FORMULAIRE_RESERVATION_HTML = """
 
   // Affiche les options specifiques au transport medical (accompagnant,
   // bon de transport retour) uniquement quand ce type est selectionne.
+  // Sur la page publique (client), synchronise aussi le sous-titre, le
+  // badge, le libelle/icone du champ destination et le texte du bouton.
   const radioPrive = document.getElementById('type_prive');
   const radioMedical = document.getElementById('type_medical');
   const optionsMedical = document.getElementById('options_medical');
   if (radioPrive && radioMedical && optionsMedical) {
+    const iconePin = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+    const iconeHopital = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><path d="M12 7v6M9 10h6"/></svg>';
+    const iconeBadgePrive = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>';
+    const iconeBadgeMedical = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v6M9 11h6"/></svg>';
+
     function majOptionsMedical() {
-      optionsMedical.style.display = radioMedical.checked ? 'block' : 'none';
+      const estMedical = radioMedical.checked;
+      optionsMedical.style.display = estMedical ? 'block' : 'none';
+
+      const sousTitre = document.getElementById('soustitre_dynamique');
+      if (sousTitre) {
+        sousTitre.textContent = estMedical
+          ? 'Votre transport médical en toute sérénité'
+          : 'Réservez votre course en quelques instants';
+      }
+
+      const badge = document.getElementById('badge_mode');
+      const badgeTexte = document.getElementById('badge_mode_texte');
+      const badgeIcone = document.getElementById('badge_mode_icone');
+      if (badge && badgeTexte && badgeIcone) {
+        badge.classList.toggle('badge-mode-medical', estMedical);
+        badge.classList.toggle('badge-mode-prive', !estMedical);
+        badgeTexte.textContent = estMedical ? 'Conventionné • Disponible 24h/24' : 'Disponible 24h/24';
+        badgeIcone.innerHTML = estMedical ? iconeBadgeMedical : iconeBadgePrive;
+      }
+
+      const labelDest = document.getElementById('destination_label_texte');
+      const iconeDest = document.getElementById('destination_icone');
+      const champDest = document.getElementById('destination');
+      if (labelDest && iconeDest && champDest) {
+        labelDest.textContent = estMedical ? 'Établissement ou destination' : 'Destination';
+        iconeDest.innerHTML = estMedical ? iconeHopital : iconePin;
+        champDest.placeholder = estMedical ? 'Ex : Hopital Pasteur 2' : 'Ex : Aeroport de Nice';
+      }
+
+      const texteBouton = document.getElementById('bouton_texte');
+      if (texteBouton) {
+        texteBouton.textContent = estMedical ? 'Réserver mon transport' : 'Réserver la course';
+      }
     }
     radioPrive.addEventListener('change', majOptionsMedical);
     radioMedical.addEventListener('change', majOptionsMedical);
+    majOptionsMedical();
   }
 
   // Empeche les doubles reservations en cas de double-clic ou d'appui
@@ -1171,10 +1322,4 @@ def valider_reservation():
 
     return render_template_string(
         CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference, mode_admin=mode_admin,
-        role=role, admin_code=code_saisi if role else "",
-    )
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+        role=rol
