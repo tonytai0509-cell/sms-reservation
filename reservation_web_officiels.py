@@ -353,10 +353,25 @@ FORMULAIRE_RESERVATION_HTML = """
   }
   .entete h1 {
     font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
-    color: var(--rouge); letter-spacing: 0.5px; margin: 0 0 4px;
+    letter-spacing: 0.5px; margin: 0 0 14px;
     font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
+    color: var(--rouge);
+    background: linear-gradient(
+      90deg,
+      var(--rouge-fonce) 0%, var(--rouge) 20%, #FF7A6B 50%, var(--rouge) 80%, var(--rouge-fonce) 100%
+    );
+    background-size: 220% auto;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 6px rgba(179,38,32,0.45), 0 0 16px rgba(179,38,32,0.3), 0 0 30px rgba(179,38,32,0.18);
+    animation: neon-balayage 4.5s linear infinite;
   }
-  .entete p { margin: 0 0 12px; color: var(--texte-secondaire); font-size: 13.5px; }
+  @keyframes neon-balayage {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 220% 50%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .entete h1 { animation: none; }
+  }
   .badge-role {
     display: inline-flex; align-items: center; gap: 6px;
     border: 1.5px solid var(--rouge); color: var(--rouge); background: transparent;
@@ -448,13 +463,6 @@ FORMULAIRE_RESERVATION_HTML = """
     justify-content: center; cursor: pointer; z-index: 2; color: var(--rouge);
   }
 
-  .case-auto {
-    margin-top: 12px; display: flex; align-items: flex-start; gap: 9px;
-    font-size: 13.5px; color: var(--texte-secondaire);
-  }
-  .case-auto input[type=checkbox] {
-    width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; accent-color: var(--rouge);
-  }
   input[type=checkbox] { accent-color: var(--rouge); }
 
   /* ---------- Bouton principal ---------- */
@@ -494,7 +502,6 @@ FORMULAIRE_RESERVATION_HTML = """
   <div class="entete">
     <img class="logo-aigle" src="/logo.png" alt="Les Taxis Officiels de Nice">
     <h1>Les Taxis Officiels de Nice</h1>
-    <p>{% if role == 'secretaire' %}Saisie rapide du transport d'un patient dans l'agenda{% else %}Saisie rapide d'une course dans l'agenda{% endif %}</p>
     <div class="badge-role">
       {% if role == 'secretaire' %}Mode secretaire{% else %}Mode admin{% endif %}
     </div>
@@ -669,15 +676,7 @@ FORMULAIRE_RESERVATION_HTML = """
       <label for="heure_pc">Heure de prise en charge</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}">
-      </div>
-
-      <div class="case-auto">
-        <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
-               {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
-        <label for="heure_inconnue" style="margin:0; font-weight:400; color:var(--texte-secondaire);">
-          Laissez la centrale calculer mon heure de prise en charge automatiquement selon le trajet.
-        </label>
+        <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}" required>
       </div>
     </div>
 
@@ -686,27 +685,9 @@ FORMULAIRE_RESERVATION_HTML = """
       Ajouter a l'agenda
     </button>
   </form>
-
-  <div class="pied">
-    Outil interne -- aucune notification (SMS/email) n'est envoyee au client.
-  </div>
 </div>
 
 <script>
-  const caseInconnue = document.getElementById('heure_inconnue');
-  const champPC = document.getElementById('heure_pc');
-  const champRDV = document.getElementById('heure_rdv');
-
-  function majEtatsChamps() {
-    const inconnue = caseInconnue.checked;
-    champPC.disabled = inconnue;
-    champPC.required = !inconnue;
-    if (inconnue) { champPC.value = ''; }
-    champRDV.required = inconnue;
-  }
-  caseInconnue.addEventListener('change', majEtatsChamps);
-  majEtatsChamps();
-
   document.getElementById('bouton_inverser').addEventListener('click', function () {
     const pc = document.getElementById('prise_en_charge');
     const dest = document.getElementById('destination');
