@@ -374,39 +374,33 @@ FORMULAIRE_RESERVATION_HTML = """
     width: 76px; height: 76px; object-fit: contain; margin: 0 auto 2px; display: block;
   }
   .entete h1 {
+    position: relative; display: inline-block;
     font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.5px; margin: 0 0 14px;
     font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
-    position: relative;
-    display: inline-block;
     color: var(--rouge);
-    text-shadow: 0 0 6px rgba(179,38,32,.55), 0 0 18px rgba(179,38,32,.28);
+    text-shadow: 0 0 2px rgba(179,38,32,0.55), 0 0 6px rgba(179,38,32,0.35), 0 0 14px rgba(179,38,32,0.2);
   }
   .entete h1::before {
     content: attr(data-text);
-    position: absolute;
-    left: 0; top: 0;
-    width: 100%;
-    background: linear-gradient(100deg,
-      transparent 42%,
-      rgba(255,255,255,.85) 50%,
-      transparent 58%);
-    background-size: 300% 100%;
-    background-repeat: no-repeat;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-    text-shadow: none;
+    position: absolute; inset: 0;
+    text-transform: uppercase; letter-spacing: inherit;
+    background: linear-gradient(
+      100deg,
+      transparent 0%, transparent 46%, #FFFDF8 50%, transparent 54%, transparent 100%
+    );
+    background-size: 320% 100%;
+    background-position: -140% 0;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+    animation: neon-eclat 6.5s linear infinite;
     pointer-events: none;
-    animation: reflet 5s linear infinite;
   }
-  @keyframes reflet {
-    from { background-position: 100% 0; }
-    to   { background-position: 0% 0; }
+  @keyframes neon-eclat {
+    0% { background-position: -140% 0; }
+    100% { background-position: 260% 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .entete h1::before { animation: none; background: none; }
+    .entete h1::before { animation: none; display: none; }
   }
   .badge-role {
     display: inline-flex; align-items: center; gap: 6px;
@@ -501,6 +495,29 @@ FORMULAIRE_RESERVATION_HTML = """
 
   input[type=checkbox] { accent-color: var(--rouge); }
 
+  /* ---------- Interrupteurs (accompagnant / bon de transport) ---------- */
+  .toggle-ligne {
+    display: flex; align-items: center; gap: 10px; margin: 12px 0 0;
+    font-weight: 400; font-size: 14px; color: var(--noir); cursor: pointer;
+  }
+  .toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+  .toggle-switch input {
+    position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer;
+  }
+  .toggle-piste {
+    position: absolute; inset: 0; background: #E4D4B0; border-radius: 999px;
+    transition: background-color .18s ease;
+  }
+  .toggle-piste::before {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+    background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(23,17,17,0.25);
+    transition: transform .18s ease;
+  }
+  .toggle-switch input:checked + .toggle-piste { background: var(--rouge); }
+  .toggle-switch input:checked + .toggle-piste::before { transform: translateX(18px); }
+  .toggle-switch input:focus-visible + .toggle-piste { box-shadow: 0 0 0 3px var(--rouge-fond-leger); }
+  .toggle-texte { color: var(--noir); }
+
   /* ---------- Bouton principal ---------- */
   button.envoyer {
     width: 100%; margin-top: 6px; padding: 18px; min-height: 60px; font-size: 16.5px;
@@ -537,7 +554,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
   <div class="entete">
     <img class="logo-aigle" src="/logo.png" alt="Les Taxis Officiels de Nice">
-    <h1 data-text="LES TAXIS OFFICIELS DE NICE">LES TAXIS OFFICIELS DE NICE</h1>
+    <h1 data-text="Les Taxis Officiels de Nice">Les Taxis Officiels de Nice</h1>
     <div class="badge-role">
       {% if role == 'secretaire' %}Mode secretaire{% else %}Mode admin{% endif %}
     </div>
@@ -641,15 +658,21 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       <div id="options_medical" class="options-medical" style="display: {% if valeurs.get('type_course') == 'medical' %}block{% else %}none{% endif %};">
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:var(--texte-secondaire); margin:10px 0 0;">
-          <input type="checkbox" id="accompagnant" name="accompagnant" value="oui" style="width:20px; height:20px;"
-                 {% if valeurs.get('accompagnant') %}checked{% endif %}>
-          J'aurai un accompagnant avec moi
+        <label class="toggle-ligne">
+          <span class="toggle-switch">
+            <input type="checkbox" id="accompagnant" name="accompagnant" value="oui"
+                   {% if valeurs.get('accompagnant') %}checked{% endif %}>
+            <span class="toggle-piste"></span>
+          </span>
+          <span class="toggle-texte">Accompagnant avec le patient</span>
         </label>
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:var(--texte-secondaire); margin:8px 0 0;">
-          <input type="checkbox" id="bto_retour" name="bto_retour" value="oui" style="width:20px; height:20px;"
-                 {% if valeurs.get('bto_retour') %}checked{% endif %}>
-          Je donnerai mon bon de transport au retour
+        <label class="toggle-ligne">
+          <span class="toggle-switch">
+            <input type="checkbox" id="bto_retour" name="bto_retour" value="oui"
+                   {% if valeurs.get('bto_retour') %}checked{% endif %}>
+            <span class="toggle-piste"></span>
+          </span>
+          <span class="toggle-texte">Bon de transport remis au retour</span>
         </label>
       </div>
 
