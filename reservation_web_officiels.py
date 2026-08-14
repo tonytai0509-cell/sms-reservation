@@ -169,6 +169,13 @@ def generer_reference() -> str:
     return "".join(random.choices(alphabet, k=6))
 
 
+def formater_prix(valeur: float) -> str:
+    """Formate un montant sans decimales inutiles (35.0 -> '35', 35.5 -> '35.5')."""
+    if valeur == int(valeur):
+        return str(int(valeur))
+    return f"{valeur:.2f}".rstrip("0").rstrip(".")
+
+
 def extraire_reference_de_description(description: str) -> str:
     """Recupere le code de reference ecrit dans la description d'un
     evenement Google Agenda (ligne 'REF : XXXXXX')."""
@@ -249,11 +256,20 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
     heure_rdv_aff = donnees.get("heure_rdv") or heure_aff
     nom_pour_agenda = donnees.get("nom_agenda") or donnees["nom"]
 
+    prix_min = donnees.get("prix_min")
+    prix_max = donnees.get("prix_max")
+    prix_annonce = (
+        f"{formater_prix(prix_min)}€-{formater_prix(prix_max)}€"
+        if prix_min is not None and prix_max is not None
+        else None
+    )
+
     titre = (
         f"PC {heure_aff} M. {nom_pour_agenda} | "
         f"PC : {donnees['prise_en_charge']} | "
         f"DEST : {donnees['destination']} | "
-        f"RDV : {heure_rdv_aff} {type_tag} | "
+        + (f"PRIX : {prix_annonce} | " if prix_annonce else "")
+        + f"RDV : {heure_rdv_aff} {type_tag} | "
         f"TEL : {telephone} | REF : {reference}"
         + (f" [{donnees['nom_infirmiere']}]" if donnees.get("nom_infirmiere") else "")
         + (" [ACCOMPAGNANT]" if donnees.get("accompagnant") else "")
@@ -269,6 +285,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"RDV : {heure_rdv_aff} {type_tag}\n"
         f"TEL : {telephone}\n"
         f"SOURCE : {source_label}"
+        + (f"\nPRIX ANNONCE : {prix_annonce}" if prix_annonce else "")
         + (f"\nINFIRMIERE : {donnees['nom_infirmiere']}" if donnees.get("nom_infirmiere") else "")
         + ("\nACCOMPAGNANT : OUI" if donnees.get("accompagnant") else "")
         + ("\nBT : AU RETOUR UNIQUEMENT" if donnees.get("bto_retour") else "")
@@ -360,14 +377,14 @@ FORMULAIRE_RESERVATION_HTML = """
       90deg,
       var(--rouge-fonce) 0%, var(--rouge) 20%, #FF7A6B 50%, var(--rouge) 80%, var(--rouge-fonce) 100%
     );
-    background-size: 220% auto;
+    background-size: 180% auto;
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 6px rgba(179,38,32,0.45), 0 0 16px rgba(179,38,32,0.3), 0 0 30px rgba(179,38,32,0.18);
-    animation: neon-balayage 4.5s linear infinite;
+    text-shadow: 0 0 2px rgba(179,38,32,0.5), 0 0 7px rgba(179,38,32,0.28), 0 0 14px rgba(179,38,32,0.14);
+    animation: neon-balayage 8s linear infinite;
   }
   @keyframes neon-balayage {
     0% { background-position: 0% 50%; }
-    100% { background-position: 220% 50%; }
+    100% { background-position: 180% 50%; }
   }
   @media (prefers-reduced-motion: reduce) {
     .entete h1 { animation: none; }
@@ -428,7 +445,7 @@ FORMULAIRE_RESERVATION_HTML = """
   }
   .champ-icone input { padding-left: 44px !important; }
 
-  input[type=text], input[type=tel], input[type=date], input[type=time] {
+  input[type=text], input[type=tel], input[type=date], input[type=time], input[type=number] {
     width: 100%; min-height: 56px; padding: 14px; font-size: 16px;
     border: 1.5px solid var(--bordure-chaude); border-radius: 13px; background: var(--champ-fond);
     font-family: 'Inter', sans-serif; color: var(--noir); -webkit-appearance: none;
@@ -616,6 +633,20 @@ FORMULAIRE_RESERVATION_HTML = """
           Je donnerai mon bon de transport au retour
         </label>
       </div>
+
+      <div id="options_prive" class="options-prive" style="display: {% if valeurs.get('type_course', 'prive') == 'prive' %}block{% else %}none{% endif %};">
+        <label style="margin-top: 10px;">Prix annoncé au client</label>
+        <div class="ligne-double">
+          <div>
+            <input type="number" id="prix_min" name="prix_min" placeholder="Mini (€)" min="0" step="1"
+                   value="{{ valeurs.get('prix_min', '') }}">
+          </div>
+          <div>
+            <input type="number" id="prix_max" name="prix_max" placeholder="Maxi (€)" min="0" step="1"
+                   value="{{ valeurs.get('prix_max', '') }}">
+          </div>
+        </div>
+      </div>
       {% endif %}
 
       <div class="adresses" style="margin-top: 8px;">
@@ -699,9 +730,11 @@ FORMULAIRE_RESERVATION_HTML = """
   const radioPrive = document.getElementById('type_prive');
   const radioMedical = document.getElementById('type_medical');
   const optionsMedical = document.getElementById('options_medical');
-  if (radioPrive && radioMedical && optionsMedical) {
+  const optionsPrive = document.getElementById('options_prive');
+  if (radioPrive && radioMedical) {
     function majOptionsMedical() {
-      optionsMedical.style.display = radioMedical.checked ? 'block' : 'none';
+      if (optionsMedical) { optionsMedical.style.display = radioMedical.checked ? 'block' : 'none'; }
+      if (optionsPrive) { optionsPrive.style.display = radioPrive.checked ? 'block' : 'none'; }
     }
     radioPrive.addEventListener('change', majOptionsMedical);
     radioMedical.addEventListener('change', majOptionsMedical);
@@ -913,6 +946,8 @@ def valider_reservation():
     heure_rdv_saisie = (request.form.get("heure_rdv") or "").strip()
     heure_pc_saisie = (request.form.get("heure_pc") or "").strip()
     heure_inconnue = request.form.get("heure_inconnue") == "oui"
+    prix_min_saisi = (request.form.get("prix_min") or "").strip()
+    prix_max_saisi = (request.form.get("prix_max") or "").strip()
 
     if role == "secretaire":
         if not all([patient_nom_complet, telephone_saisi, prise_en_charge, destination, date_str]):
@@ -921,6 +956,19 @@ def valider_reservation():
             return page_erreur("Merci d'indiquer le nom de la secretaire ou de l'infirmiere.")
     elif not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str]):
         return page_erreur("Merci de remplir tous les champs du formulaire.")
+
+    prix_min = None
+    prix_max = None
+    if type_course != "medical" and (prix_min_saisi or prix_max_saisi):
+        if not (prix_min_saisi and prix_max_saisi):
+            return page_erreur("Merci d'indiquer le prix mini ET le prix maxi, ou de laisser les deux vides.")
+        try:
+            prix_min = float(prix_min_saisi.replace(",", "."))
+            prix_max = float(prix_max_saisi.replace(",", "."))
+        except ValueError:
+            return page_erreur("Le prix annonce saisi n'est pas valide.")
+        if prix_min > prix_max:
+            return page_erreur("Le prix mini ne peut pas etre superieur au prix maxi.")
 
     if role == "secretaire":
         nom_complet = patient_nom_complet
@@ -947,6 +995,8 @@ def valider_reservation():
         "telephone": telephone,
         "prise_en_charge": prise_en_charge,
         "destination": destination,
+        "prix_min": prix_min,
+        "prix_max": prix_max,
         "heure": None,
         "heure_rdv": None,
         "heure_iso": None,
