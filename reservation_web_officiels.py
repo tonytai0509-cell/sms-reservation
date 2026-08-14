@@ -330,8 +330,6 @@ FORMULAIRE_RESERVATION_HTML = """
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <meta name="theme-color" content="#B32620">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Taxis Nice">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -376,25 +374,34 @@ FORMULAIRE_RESERVATION_HTML = """
     width: 76px; height: 76px; object-fit: contain; margin: 0 auto 2px; display: block;
   }
   .entete h1 {
+    position: relative; display: inline-block;
     font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.5px; margin: 0 0 14px;
     font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
     color: var(--rouge);
-    background: linear-gradient(
-      90deg,
-      var(--rouge-fonce) 0%, var(--rouge) 20%, #FF9284 50%, var(--rouge) 80%, var(--rouge-fonce) 100%
-    );
-    background-size: 180% auto;
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 3px rgba(179,38,32,0.75), 0 0 9px rgba(179,38,32,0.5), 0 0 18px rgba(179,38,32,0.3);
-    animation: neon-balayage 8s linear infinite;
+    text-shadow: 0 0 1px rgba(179,38,32,0.7), 0 0 4px rgba(179,38,32,0.4), 0 0 10px rgba(179,38,32,0.22);
   }
-  @keyframes neon-balayage {
-    0% { background-position: 180% 50%; }
-    100% { background-position: 0% 50%; }
+  .entete h1::before {
+    content: attr(data-text);
+    position: absolute; inset: 0;
+    text-transform: uppercase; letter-spacing: inherit;
+    background: linear-gradient(
+      100deg,
+      transparent 0%, transparent 42%, rgba(255,255,255,0.9) 50%, transparent 58%, transparent 100%
+    );
+    background-size: 300% 100%;
+    background-position: -80% 0;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+    animation: neon-reflet 5.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes neon-reflet {
+    0% { background-position: -80% 0; }
+    18% { background-position: 180% 0; }
+    100% { background-position: 180% 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .entete h1 { animation: none; }
+    .entete h1::before { animation: none; display: none; }
   }
   .badge-role {
     display: inline-flex; align-items: center; gap: 6px;
@@ -525,7 +532,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
   <div class="entete">
     <img class="logo-aigle" src="/logo.png" alt="Les Taxis Officiels de Nice">
-    <h1>Les Taxis Officiels de Nice</h1>
+    <h1 data-text="Les Taxis Officiels de Nice">Les Taxis Officiels de Nice</h1>
     <div class="badge-role">
       {% if role == 'secretaire' %}Mode secretaire{% else %}Mode admin{% endif %}
     </div>
@@ -931,7 +938,7 @@ def manifest_web_app():
         "short_name": "Taxis Nice",
         "start_url": start_url,
         "scope": "/",
-        "display": "standalone",
+        "display": "browser",
         "background_color": "#F3E6C8",
         "theme_color": "#B32620",
         "icons": [
