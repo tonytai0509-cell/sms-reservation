@@ -455,7 +455,32 @@ FORMULAIRE_RESERVATION_HTML = """
   .entete-texte { flex: 1; text-align: center; }
   .entete-texte svg { color: var(--navy); margin-bottom: 6px; }
   .entete h1 {
-    font-size: 18px; margin: 0 0 4px; color: var(--navy); font-weight: 800; line-height: 1.2;
+    position: relative; display: inline-block;
+    font-weight: 800; letter-spacing: 0.2px; margin: 0 0 4px;
+    font-size: 18px; line-height: 1.2;
+    color: var(--navy);
+    text-shadow: 0 0 2px rgba(13,42,82,0.5), 0 0 6px rgba(13,42,82,0.3), 0 0 14px rgba(13,42,82,0.18);
+  }
+  .entete h1::before {
+    content: attr(data-text);
+    position: absolute; inset: 0;
+    letter-spacing: inherit;
+    background: linear-gradient(
+      100deg,
+      transparent 0%, transparent 46%, #fff 50%, transparent 54%, transparent 100%
+    );
+    background-size: 320% 100%;
+    background-position: -140% 0;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+    animation: neon-eclat 6.5s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes neon-eclat {
+    0% { background-position: -140% 0; }
+    100% { background-position: 260% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .entete h1::before { animation: none; display: none; }
   }
   .entete p { margin: 0; color: #667; font-size: 13px; }
   .badge-partenaire {
@@ -651,7 +676,7 @@ FORMULAIRE_RESERVATION_HTML = """
   <div class="entete">
     <img class="photo-agent" src="data:image/jpeg;base64,{{ photo_agent }}" alt="Votre interlocutrice">
     <div class="entete-texte">
-      <h1>Centrale des Taxis Niçois</h1>
+      <h1 data-text="Centrale des Taxis Niçois">Centrale des Taxis Niçois</h1>
       {% if role == 'secretaire' %}
       <p>Réservez le transport de votre patient en quelques instants</p>
       <div class="badge-partenaire">Mode partenaire</div>
@@ -1302,24 +1327,4 @@ def valider_reservation():
             "Merci d'appeler directement la centrale pour reserver votre taxi."
         )
 
-    if mode_admin:
-        if role == "secretaire":
-            # Mode partenaire/secretaire : pas de SMS au client, mais on
-            # notifie quand meme Tony par email pour qu'il soit au courant.
-            envoyer_email_confirmation(donnees, reference)
-        log.info(
-            "Reservation %s creee : %s (ref %s, tel %s, event %s) -- pas de SMS envoye",
-            (role or "admin").upper(), nom_complet, reference, telephone, event_id,
-        )
-    else:
-        envoyer_email_confirmation(donnees, reference)
-        texte_sms = construire_sms_confirmation(donnees, reference, heure_estimee)
-        envoyer_sms(telephone, texte_sms)
-        log.info(
-            "Reservation web creee : %s (ref %s, tel %s, event %s)",
-            nom_complet, reference, telephone, event_id,
-        )
-
-    return render_template_string(
-        CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference, mode_admin=mode_admin,
-        role=rol
+    i
