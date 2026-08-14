@@ -13,6 +13,11 @@ CE QUE CE FICHIER NE FAIT PAS (volontairement) :
   - Pas d'acces public sans code : sans ?admin=CODE valide, le formulaire
     refuse l'affichage/la soumission.
 
+Design : identite visuelle "affiche niçoise vintage x application moderne"
+(fond ivoire, rouge principal, aigle/ecusson en en-tete). Uniquement de
+l'habillage visuel -- aucune logique metier n'est modifiee par rapport a
+la version precedente de ce fichier.
+
 Deploiement recommande : un service Railway INDEPENDANT (nouveau projet
 ou nouveau service dans un projet existant), avec son PROPRE calendrier
 Google et ses PROPRES variables d'environnement (aucune ne doit etre
@@ -296,6 +301,29 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
 # Pages web
 # ---------------------------------------------------------------------------
 
+# Emblème aigle + écusson (SVG vectoriel inline, aucun fichier externe).
+# Sobre et unique : un seul point d'ornement dans toute l'interface -- le
+# reste du design reste volontairement discipliné autour de lui.
+LOGO_AIGLE_SVG = """
+<svg viewBox="0 0 120 96" width="60" height="48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <g fill="#171717">
+    <path d="M60 14 C63 8 71 6 78 9 C73 10 68 13 65 18 C71 16 79 17 85 22 C78 21 71 23 66 28
+             C74 27 82 30 88 37 C80 35 72 36 67 40 C76 40 84 45 90 53 C81 50 72 50 66 53
+             C74 55 81 61 85 70 C76 65 68 63 62 63 C60 58 59 48 60 40 C58 46 55 55 52 61
+             C46 61 38 63 29 68 C33 59 40 53 48 51 C42 48 33 48 24 51 C30 43 38 40 46 40
+             C41 36 33 35 25 37 C31 30 39 27 47 28 C42 23 34 22 27 22 C33 17 41 16 47 18
+             C44 13 39 10 34 9 C41 6 49 8 52 14 C53 11 56 9 60 9 C60 9 60 12 60 14 Z"/>
+    <path d="M55 22 C56 18 60 16 64 17 C62 20 60 22 58 24 C57 23.4 56 22.8 55 22 Z"/>
+  </g>
+  <g>
+    <path d="M60 34 L72 34 L72 52 C72 60 66 65 60 68 C54 65 48 60 48 52 L48 34 Z"
+          fill="none" stroke="#B89A5A" stroke-width="1.6"/>
+    <path d="M60 35.4 L49.4 35.4 L49.4 52 C49.4 58.8 54.6 63.2 60 65.9 Z" fill="#F3E6C8"/>
+    <path d="M60 35.4 L70.6 35.4 L70.6 52 C70.6 58.8 65.4 63.2 60 65.9 Z" fill="#B32620"/>
+  </g>
+</svg>
+"""
+
 FORMULAIRE_RESERVATION_HTML = """
 <!doctype html>
 <html lang="fr">
@@ -303,131 +331,169 @@ FORMULAIRE_RESERVATION_HTML = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reserver un taxi - Les Taxis Officiels de Nice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     color-scheme: light;
-    --navy: #0d2a52;
-    --navy-dark: #081b38;
-    --vert: #1e8e3e;
-    --vert-clair: #e7f6ec;
-    --bordure: #dde2e8;
+    --ivoire: #F3E6C8;
+    --rouge: #B32620;
+    --rouge-fonce: #8F1D18;
+    --noir: #171717;
+    --dore: #B89A5A;
+    --champ-fond: #FFFDF8;
+    --texte-secondaire: #686159;
+    --bordure-chaude: #DCCBA6;
+    --rouge-fond-leger: rgba(179, 38, 32, 0.07);
+    --rouge-ombre: rgba(179, 38, 32, 0.28);
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { max-width: 100%; overflow-x: hidden; }
   body {
-    margin: 0; padding: 24px 16px 60px; background: #f4f5f7;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    color: #1a1a1a;
+    margin: 0; padding: 22px 16px 48px; background: var(--ivoire);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--noir);
   }
-  .page { max-width: 480px; margin: 0 auto; }
+  .page { max-width: 480px; margin: 0 auto; width: 100%; }
   .grille-haut { display: contents; }
 
   @media (min-width: 720px) {
     body { padding: 40px 24px 60px; }
-    .page { max-width: 880px; }
+    .page { max-width: 900px; }
     .grille-haut {
       display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start;
     }
     .grille-haut .carte { margin-bottom: 0; min-width: 0; }
     .raccourcis { flex-wrap: wrap; overflow-x: visible; }
   }
-  .entete { margin-bottom: 20px; padding-top: 4px; text-align: center; }
-  .entete h1 { font-size: 18px; margin: 0 0 4px; color: var(--navy); font-weight: 800; line-height: 1.2; }
-  .entete p { margin: 0; color: #667; font-size: 13px; }
+
+  /* ---------- En-tete ---------- */
+  .entete { text-align: center; padding-top: 4px; margin-bottom: 18px; }
+  .entete .logo-aigle { margin: 0 auto 4px; display: block; }
+  .entete h1 {
+    font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
+    color: var(--rouge); letter-spacing: 0.5px; margin: 0 0 4px;
+    font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
+  }
+  .entete p { margin: 0 0 12px; color: var(--texte-secondaire); font-size: 13.5px; }
   .badge-role {
-    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-    margin: 10px auto 0; background: var(--navy); color: #fff; padding: 5px 12px;
-    border-radius: 20px; font-size: 13px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1.5px solid var(--rouge); color: var(--rouge); background: transparent;
+    padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.6px; text-transform: uppercase;
   }
 
+  /* ---------- Cartes ---------- */
   .carte {
-    background: #ffffff; border-radius: 16px; padding: 20px 20px 14px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin-bottom: 12px;
+    background: var(--champ-fond); border: 1.5px solid rgba(179, 38, 32, 0.35);
+    border-radius: 18px; padding: 20px 18px 16px;
+    box-shadow: 0 4px 16px rgba(23, 17, 17, 0.07); margin-bottom: 14px;
   }
   .section-titre { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
   .numero {
-    width: 26px; height: 26px; border-radius: 50%; background: var(--navy);
-    color: #fff; font-weight: 700; font-size: 14px;
+    width: 27px; height: 27px; border-radius: 50%; background: var(--rouge);
+    color: #fff; font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 14px;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .section-titre h2 { margin: 0; font-size: 16px; color: var(--navy); }
+  .section-titre h2 {
+    margin: 0; font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; font-size: 16.5px; color: var(--rouge);
+  }
   .badge-medical {
-    display: inline-flex; align-items: center; gap: 5px; background: var(--vert-clair);
-    color: var(--vert); padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 5px; background: var(--rouge-fond-leger);
+    color: var(--rouge); padding: 5px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 700;
   }
   .infirmiere-affichage {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    margin-top: 16px; font-size: 13px; color: #444; flex-wrap: nowrap;
+    margin-top: 16px; font-size: 13px; color: var(--noir); flex-wrap: nowrap;
   }
   .infirmiere-affichage span {
-    display: inline-flex; align-items: center; gap: 6px; color: #667;
+    display: inline-flex; align-items: center; gap: 6px; color: var(--texte-secondaire);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
-  .infirmiere-affichage span svg { flex-shrink: 0; color: #8a95a3; }
-  .infirmiere-affichage strong { color: #1a1a1a; }
+  .infirmiere-affichage span svg { flex-shrink: 0; color: var(--dore); }
+  .infirmiere-affichage strong { color: var(--noir); }
   .infirmiere-affichage button {
     display: inline-flex; align-items: center; gap: 5px; background: none; border: none;
-    color: var(--navy); font-weight: 600; font-size: 13px; cursor: pointer; padding: 4px 6px;
-    flex-shrink: 0;
+    color: var(--rouge); font-weight: 600; font-size: 13px; cursor: pointer; padding: 4px 6px;
+    flex-shrink: 0; font-family: 'Inter', sans-serif;
   }
 
-  label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; color: #333; }
+  /* ---------- Champs ---------- */
+  label {
+    display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; color: var(--noir);
+  }
   label:first-of-type { margin-top: 0; }
 
   .champ-icone { position: relative; }
   .champ-icone svg {
     position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-    color: #8a95a3; pointer-events: none;
+    color: var(--noir); pointer-events: none;
   }
-  .champ-icone input { padding-left: 42px !important; }
+  .champ-icone input { padding-left: 44px !important; }
 
   input[type=text], input[type=tel], input[type=date], input[type=time] {
-    width: 100%; padding: 13px 14px; font-size: 16px; border: 1.5px solid var(--bordure);
-    border-radius: 10px; background: #fafbfc;
+    width: 100%; min-height: 56px; padding: 14px; font-size: 16px;
+    border: 1.5px solid var(--bordure-chaude); border-radius: 13px; background: var(--champ-fond);
+    font-family: 'Inter', sans-serif; color: var(--noir); -webkit-appearance: none;
   }
   input:focus {
-    outline: none; border-color: var(--navy);
-    box-shadow: 0 0 0 3px rgba(13, 42, 82, 0.15);
+    outline: none; border-color: var(--rouge);
+    box-shadow: 0 0 0 3px var(--rouge-fond-leger);
   }
-  input::placeholder { font-size: 14px; }
+  input::placeholder { font-size: 14.5px; color: #A79F92; }
 
-  .ligne-double { display: flex; gap: 10px; }
-  .ligne-double > div { flex: 1; }
+  .ligne-double { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ligne-double > div { flex: 1 1 130px; min-width: 130px; }
 
+  /* ---------- Selecteur type de course ---------- */
   .choix { display: flex; gap: 10px; margin: 6px 0 4px; }
   .choix label {
     flex: 1; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
-    text-align: center; padding: 13px 6px; border: 1.5px solid var(--bordure);
-    border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; color: #444;
+    text-align: center; padding: 14px 8px; min-height: 56px; border: 1.5px solid var(--bordure-chaude);
+    border-radius: 13px; font-weight: 600; cursor: pointer; font-size: 14px; color: var(--noir);
+    background: #ffffff; transition: border-color .15s ease, background-color .15s ease, color .15s ease;
   }
   .choix input { display: none; }
   .choix label svg { flex-shrink: 0; }
-  label:has(#type_prive:checked) { border-color: var(--navy); background: #eef2f7; color: var(--navy); }
-  label:has(#type_medical:checked) { border-color: var(--vert); background: var(--vert-clair); color: var(--vert); }
+  label:has(#type_prive:checked) { border-color: var(--rouge); background: var(--rouge-fond-leger); color: var(--rouge); }
+  label:has(#type_medical:checked) { border-color: var(--rouge); background: var(--rouge-fond-leger); color: var(--rouge); }
 
   .adresses { position: relative; }
   .bouton-inverser {
     position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
-    width: 30px; height: 30px; border-radius: 50%; background: #fff;
-    border: 1.5px solid var(--bordure); display: flex; align-items: center;
-    justify-content: center; cursor: pointer; z-index: 2; color: var(--navy);
+    width: 32px; height: 32px; border-radius: 50%; background: var(--champ-fond);
+    border: 1.5px solid var(--rouge); display: flex; align-items: center;
+    justify-content: center; cursor: pointer; z-index: 2; color: var(--rouge);
   }
 
-  .case-auto { margin-top: 12px; display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #555; }
-  .case-auto input { width: auto; margin-top: 2px; }
+  .case-auto {
+    margin-top: 12px; display: flex; align-items: flex-start; gap: 9px;
+    font-size: 13.5px; color: var(--texte-secondaire);
+  }
+  .case-auto input[type=checkbox] {
+    width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; accent-color: var(--rouge);
+  }
+  input[type=checkbox] { accent-color: var(--rouge); }
 
+  /* ---------- Bouton principal ---------- */
   button.envoyer {
-    width: 100%; margin-top: 4px; padding: 16px; font-size: 17px; font-weight: 700;
-    background: var(--navy); color: #fff; border: none; border-radius: 12px; cursor: pointer;
+    width: 100%; margin-top: 6px; padding: 18px; min-height: 60px; font-size: 16.5px;
+    font-family: 'Oswald', sans-serif; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+    background: var(--rouge); color: #fff; border: none; border-radius: 14px; cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: 0 8px 20px var(--rouge-ombre);
+    transition: background-color .15s ease, transform .1s ease;
   }
-  button.envoyer:active { background: var(--navy-dark); }
+  button.envoyer:active { background: var(--rouge-fonce); transform: scale(0.98); }
   button.envoyer:disabled { opacity: 0.7; }
 
-  .pied { text-align: center; font-size: 13px; color: #667; margin-top: 16px; }
+  .pied { text-align: center; font-size: 12.5px; color: var(--texte-secondaire); margin-top: 16px; }
 
   .erreur {
-    background: #ffe9e9; color: #a30000; border: 1px solid #f3a3a3;
-    padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-bottom: 14px;
+    background: #FBEAE9; color: var(--rouge-fonce); border: 1px solid var(--rouge);
+    padding: 12px 14px; border-radius: 12px; font-size: 14px; margin-bottom: 14px;
   }
   .raccourcis {
     display: flex; gap: 8px; overflow-x: auto; margin: 8px 0 4px; padding-bottom: 2px;
@@ -435,17 +501,18 @@ FORMULAIRE_RESERVATION_HTML = """
   }
   .raccourcis::-webkit-scrollbar { height: 4px; }
   .raccourcis button {
-    flex-shrink: 0; padding: 8px 13px; border-radius: 20px; border: 1.5px solid var(--bordure);
-    background: #fafbfc; font-size: 13px; font-weight: 600; color: #444; cursor: pointer;
-    white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+    flex-shrink: 0; padding: 9px 14px; border-radius: 20px; border: 1.5px solid var(--bordure-chaude);
+    background: #ffffff; font-size: 13px; font-weight: 600; color: var(--noir); cursor: pointer;
+    white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; font-family: 'Inter', sans-serif;
   }
-  .raccourcis button:active { background: #eef2f7; border-color: var(--navy); color: var(--navy); }
+  .raccourcis button:active { background: var(--rouge-fond-leger); border-color: var(--rouge); color: var(--rouge); }
 </style>
 </head>
 <body>
 <div class="page">
 
   <div class="entete">
+    <div class="logo-aigle">{{ logo_aigle|safe }}</div>
     <h1>Les Taxis Officiels de Nice</h1>
     <p>{% if role == 'secretaire' %}Saisie rapide du transport d'un patient dans l'agenda{% else %}Saisie rapide d'une course dans l'agenda{% endif %}</p>
     <div class="badge-role">
@@ -551,15 +618,15 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       <div id="options_medical" class="options-medical" style="display: {% if valeurs.get('type_course') == 'medical' %}block{% else %}none{% endif %};">
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:#777; margin:10px 0 0;">
-          <input type="checkbox" id="accompagnant" name="accompagnant" value="oui" style="width:auto;"
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:var(--texte-secondaire); margin:10px 0 0;">
+          <input type="checkbox" id="accompagnant" name="accompagnant" value="oui" style="width:20px; height:20px;"
                  {% if valeurs.get('accompagnant') %}checked{% endif %}>
-          Accompagnant present
+          J'aurai un accompagnant avec moi
         </label>
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:#777; margin:8px 0 0;">
-          <input type="checkbox" id="bto_retour" name="bto_retour" value="oui" style="width:auto;"
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:var(--texte-secondaire); margin:8px 0 0;">
+          <input type="checkbox" id="bto_retour" name="bto_retour" value="oui" style="width:20px; height:20px;"
                  {% if valeurs.get('bto_retour') %}checked{% endif %}>
-          Bon de transport donne au retour
+          Je donnerai mon bon de transport au retour
         </label>
       </div>
       {% endif %}
@@ -628,8 +695,8 @@ FORMULAIRE_RESERVATION_HTML = """
       <div class="case-auto">
         <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
                {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
-        <label for="heure_inconnue" style="margin:0; font-weight:400; color:#555;">
-          Calculer l'heure de prise en charge automatiquement selon le trajet.
+        <label for="heure_inconnue" style="margin:0; font-weight:400; color:var(--texte-secondaire);">
+          Laissez la centrale calculer mon heure de prise en charge automatiquement selon le trajet.
         </label>
       </div>
     </div>
@@ -726,30 +793,47 @@ CONFIRMATION_RESERVATION_HTML = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reservation ajoutee</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --ivoire: #F3E6C8; --rouge: #B32620; --rouge-fonce: #8F1D18; --noir: #171717;
+    --dore: #B89A5A; --champ-fond: #FFFDF8; --texte-secondaire: #686159;
+  }
+  * { box-sizing: border-box; }
+  html, body { max-width: 100%; overflow-x: hidden; }
   body {
-    margin: 0; padding: 24px 16px; background: #f4f5f7;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    color: #1a1a1a;
+    margin: 0; padding: 24px 16px; background: var(--ivoire);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--noir);
   }
   .carte {
-    max-width: 480px; margin: 40px auto 0; background: #ffffff; border-radius: 16px;
-    padding: 28px 22px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); text-align: center;
+    max-width: 480px; margin: 40px auto 0; background: var(--champ-fond); border-radius: 18px;
+    border: 1.5px solid rgba(179, 38, 32, 0.35);
+    padding: 30px 22px; box-shadow: 0 4px 16px rgba(23,17,17,0.08); text-align: center;
   }
   .coche {
-    width: 56px; height: 56px; border-radius: 50%; background: #e7f6ec; color: #1e8e3e;
+    width: 58px; height: 58px; border-radius: 50%; background: rgba(179, 38, 32, 0.09); color: var(--rouge);
     display: flex; align-items: center; justify-content: center; font-size: 30px;
-    margin: 0 auto 16px;
+    margin: 0 auto 16px; border: 1.5px solid var(--rouge);
   }
-  h1 { font-size: 20px; margin: 0 0 12px; }
+  h1 {
+    font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.4px; color: var(--rouge); font-size: 19px; margin: 0 0 12px;
+  }
   table { width: 100%; text-align: left; margin-top: 18px; font-size: 15px; }
-  td { padding: 6px 0; border-bottom: 1px solid #eee; }
-  td.libelle { color: #777; width: 40%; }
+  td { padding: 7px 0; border-bottom: 1px solid var(--ivoire); }
+  td.libelle { color: var(--texte-secondaire); width: 40%; }
   .ref {
-    display: inline-block; margin-top: 18px; padding: 10px 16px; background: #fff6e6;
-    border: 1px solid #f6a300; border-radius: 10px; font-weight: 700; letter-spacing: 1px;
+    display: inline-block; margin-top: 18px; padding: 10px 18px; background: rgba(184, 154, 90, 0.14);
+    border: 1px solid var(--dore); border-radius: 10px; font-weight: 700; letter-spacing: 1px;
+    color: var(--noir); font-family: 'Oswald', sans-serif;
   }
-  a.retour { display: inline-block; margin-top: 24px; color: #555; font-size: 14px; }
+  a.retour {
+    display: inline-block; margin-top: 24px; color: var(--rouge); font-size: 14px; font-weight: 600;
+    text-decoration: none;
+  }
 </style>
 </head>
 <body>
@@ -766,7 +850,7 @@ CONFIRMATION_RESERVATION_HTML = """
       {% endif %}
     </table>
     <div class="ref">Reference : {{ reference }}</div>
-    <p style="font-size:13px;color:#0d2a52;margin-top:14px;font-weight:600;">
+    <p style="font-size:13px;color:var(--texte-secondaire);margin-top:14px;font-weight:600;">
       Aucune notification envoyee au client (pas de SMS/email sur cet outil).
     </p>
     <a class="retour" href="/reserver?admin={{ admin_code }}">Ajouter une autre course</a>
@@ -782,18 +866,22 @@ ACCES_REFUSE_HTML = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Acces refuse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  :root { --ivoire: #F3E6C8; --rouge: #B32620; --rouge-fonce: #8F1D18; --texte-secondaire: #686159; }
   body {
-    margin: 0; padding: 40px 16px; background: #f4f5f7;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    color: #1a1a1a; text-align: center;
+    margin: 0; padding: 40px 16px; background: var(--ivoire);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #171717; text-align: center;
   }
   .carte {
-    max-width: 420px; margin: 0 auto; background: #fff; border-radius: 16px;
-    padding: 28px 22px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    max-width: 420px; margin: 0 auto; background: #FFFDF8; border-radius: 18px;
+    border: 1.5px solid rgba(179, 38, 32, 0.35);
+    padding: 28px 22px; box-shadow: 0 4px 16px rgba(23,17,17,0.08);
   }
-  h1 { font-size: 18px; color: #a30000; }
-  p { color: #667; font-size: 14px; }
+  h1 { font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase; font-size: 18px; color: var(--rouge-fonce); }
+  p { color: var(--texte-secondaire); font-size: 14px; }
 </style>
 </head>
 <body>
@@ -823,7 +911,7 @@ def page_reservation():
         return render_template_string(ACCES_REFUSE_HTML), 403
     return render_template_string(
         FORMULAIRE_RESERVATION_HTML, erreur=None, date_min=date_min, valeurs={},
-        role=role, admin_code=code_saisi,
+        role=role, admin_code=code_saisi, logo_aigle=LOGO_AIGLE_SVG,
     )
 
 
@@ -839,7 +927,7 @@ def valider_reservation():
     def page_erreur(message: str):
         return render_template_string(
             FORMULAIRE_RESERVATION_HTML, erreur=message, date_min=date_min, valeurs=valeurs,
-            role=role, admin_code=code_saisi,
+            role=role, admin_code=code_saisi, logo_aigle=LOGO_AIGLE_SVG,
         )
 
     prenom = (request.form.get("prenom") or "").strip()
