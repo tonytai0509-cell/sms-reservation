@@ -374,34 +374,39 @@ FORMULAIRE_RESERVATION_HTML = """
     width: 76px; height: 76px; object-fit: contain; margin: 0 auto 2px; display: block;
   }
   .entete h1 {
-    position: relative; display: inline-block;
     font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.5px; margin: 0 0 14px;
     font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
+    position: relative;
+    display: inline-block;
     color: var(--rouge);
-    text-shadow: 0 0 1px rgba(179,38,32,0.7), 0 0 4px rgba(179,38,32,0.4), 0 0 10px rgba(179,38,32,0.22);
+    text-shadow: 0 0 6px rgba(179,38,32,.55), 0 0 18px rgba(179,38,32,.28);
   }
   .entete h1::before {
     content: attr(data-text);
-    position: absolute; inset: 0;
-    text-transform: uppercase; letter-spacing: inherit;
-    background: linear-gradient(
-      100deg,
-      transparent 0%, transparent 42%, rgba(255,255,255,0.9) 50%, transparent 58%, transparent 100%
-    );
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%;
+    background: linear-gradient(100deg,
+      transparent 42%,
+      rgba(255,255,255,.85) 50%,
+      transparent 58%);
     background-size: 300% 100%;
-    background-position: -80% 0;
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
-    animation: neon-reflet 5.5s ease-in-out infinite;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    text-shadow: none;
     pointer-events: none;
+    animation: reflet 5s linear infinite;
   }
-  @keyframes neon-reflet {
-    0% { background-position: -80% 0; }
-    18% { background-position: 180% 0; }
-    100% { background-position: 180% 0; }
+  @keyframes reflet {
+    from { background-position: 100% 0; }
+    to   { background-position: 0% 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .entete h1::before { animation: none; display: none; }
+    .entete h1::before { animation: none; background: none; }
   }
   .badge-role {
     display: inline-flex; align-items: center; gap: 6px;
@@ -532,7 +537,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
   <div class="entete">
     <img class="logo-aigle" src="/logo.png" alt="Les Taxis Officiels de Nice">
-    <h1 data-text="Les Taxis Officiels de Nice">Les Taxis Officiels de Nice</h1>
+    <h1 data-text="LES TAXIS OFFICIELS DE NICE">LES TAXIS OFFICIELS DE NICE</h1>
     <div class="badge-role">
       {% if role == 'secretaire' %}Mode secretaire{% else %}Mode admin{% endif %}
     </div>
