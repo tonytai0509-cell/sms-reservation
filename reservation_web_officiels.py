@@ -374,33 +374,25 @@ FORMULAIRE_RESERVATION_HTML = """
     width: 76px; height: 76px; object-fit: contain; margin: 0 auto 2px; display: block;
   }
   .entete h1 {
-    position: relative; display: inline-block;
     font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.5px; margin: 0 0 14px;
     font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
     color: var(--rouge);
-    text-shadow: 0 0 2px rgba(179,38,32,0.55), 0 0 6px rgba(179,38,32,0.35), 0 0 14px rgba(179,38,32,0.2);
-  }
-  .entete h1::before {
-    content: attr(data-text);
-    position: absolute; inset: 0;
-    text-transform: uppercase; letter-spacing: inherit;
     background: linear-gradient(
-      100deg,
-      transparent 0%, transparent 46%, #FFFDF8 50%, transparent 54%, transparent 100%
+      90deg,
+      var(--rouge-fonce) 0%, var(--rouge) 20%, #FF9284 50%, var(--rouge) 80%, var(--rouge-fonce) 100%
     );
-    background-size: 320% 100%;
-    background-position: -140% 0;
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
-    animation: neon-eclat 6.5s linear infinite;
-    pointer-events: none;
+    background-size: 180% auto;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 3px rgba(179,38,32,0.75), 0 0 9px rgba(179,38,32,0.5), 0 0 18px rgba(179,38,32,0.3);
+    animation: neon-balayage 8s linear infinite;
   }
-  @keyframes neon-eclat {
-    0% { background-position: -140% 0; }
-    100% { background-position: 260% 0; }
+  @keyframes neon-balayage {
+    0% { background-position: 180% 50%; }
+    100% { background-position: 0% 50%; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .entete h1::before { animation: none; display: none; }
+    .entete h1 { animation: none; }
   }
   .badge-role {
     display: inline-flex; align-items: center; gap: 6px;
@@ -554,7 +546,7 @@ FORMULAIRE_RESERVATION_HTML = """
 
   <div class="entete">
     <img class="logo-aigle" src="/logo.png" alt="Les Taxis Officiels de Nice">
-    <h1 data-text="Les Taxis Officiels de Nice">Les Taxis Officiels de Nice</h1>
+    <h1>Les Taxis Officiels de Nice</h1>
     <div class="badge-role">
       {% if role == 'secretaire' %}Mode secretaire{% else %}Mode admin{% endif %}
     </div>
