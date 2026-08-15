@@ -278,16 +278,13 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + (" [BT AU RETOUR]" if donnees.get("bto_retour") else "")
         + (f" [PRISE RDV: {donnees['chauffeur']}]" if donnees.get("chauffeur") else "")
     ).upper()
-    role = donnees.get("role")
-    source_label = "reservation prise par Tony (admin)" if role == "admin" else "reservation prise par une/un secretaire"
 
     description = (
         f"REF : {reference}\n"
         f"PC : {donnees['prise_en_charge']}\n"
         f"DEST : {donnees['destination']}\n"
         f"RDV : {heure_rdv_aff} {type_tag}\n"
-        f"TEL : {telephone}\n"
-        f"SOURCE : {source_label}"
+        f"TEL : {telephone}"
         + (f"\nPRIX ANNONCE : {prix_annonce}" if prix_annonce else "")
         + (f"\nINFIRMIERE : {donnees['nom_infirmiere']}" if donnees.get("nom_infirmiere") else "")
         + ("\nACCOMPAGNANT : OUI" if donnees.get("accompagnant") else "")
