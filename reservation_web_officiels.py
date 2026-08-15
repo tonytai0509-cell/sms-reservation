@@ -379,7 +379,8 @@ FORMULAIRE_RESERVATION_HTML = """
     letter-spacing: 0.5px; margin: 0 0 14px;
     font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
     color: var(--rouge);
-    text-shadow: 0 0 1px rgba(179,38,32,0.5), 0 0 4px rgba(179,38,32,0.3), 0 0 9px rgba(179,38,32,0.18);
+    -webkit-text-stroke: 0.3px var(--rouge);
+    text-shadow: 0 0 4px rgba(179,38,32,0.3), 0 0 10px rgba(179,38,32,0.16);
   }
   .entete h1::before {
     content: attr(data-text);
