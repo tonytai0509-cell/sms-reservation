@@ -449,15 +449,39 @@ FORMULAIRE_RESERVATION_HTML = """
     display: flex; flex-direction: column; align-items: center;
     text-align: center; margin-bottom: 26px; padding-top: 4px;
   }
+  .logo-entete-conteneur {
+    position: relative; display: inline-block;
+    width: min(88vw, 620px); max-width: 100%; margin: 0 auto;
+  }
   .logo-entete {
-    display: block; width: min(88vw, 620px); max-width: 100%;
-    height: auto; object-fit: contain; margin: 0 auto;
+    display: block; width: 100%; height: auto; object-fit: contain;
+  }
+  .logo-entete-brillance {
+    position: absolute; inset: 0; pointer-events: none;
+    -webkit-mask-image: url(/logo-horizontal.png); mask-image: url(/logo-horizontal.png);
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
+    background: linear-gradient(
+      100deg,
+      transparent 0%, transparent 46%, rgba(255,255,255,0.95) 50%, transparent 54%, transparent 100%
+    );
+    background-size: 320% 100%;
+    background-position: 260% 0;
+    animation: neon-eclat-logo 6.5s linear infinite;
+  }
+  @keyframes neon-eclat-logo {
+    0% { background-position: 260% 0; }
+    100% { background-position: -140% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .logo-entete-brillance { animation: none; display: none; }
   }
   .entete-soustitre {
     margin: 14px 0 0; color: #667; font-size: 14px; font-weight: 400;
   }
   @media (max-width: 380px) {
-    .logo-entete { width: min(84vw, 340px); }
+    .logo-entete-conteneur { width: min(84vw, 340px); }
     .entete { margin-bottom: 20px; }
     .entete-soustitre { margin-top: 10px; font-size: 13px; }
   }
@@ -656,7 +680,10 @@ FORMULAIRE_RESERVATION_HTML = """
 <div class="page">
 
   <div class="entete">
-    <img class="logo-entete" src="/logo-horizontal.png" alt="Centrale des Taxis Niçois">
+    <div class="logo-entete-conteneur">
+      <img class="logo-entete" src="/logo-horizontal.png" alt="Centrale des Taxis Niçois">
+      <div class="logo-entete-brillance" aria-hidden="true"></div>
+    </div>
     {% if role == 'secretaire' %}
     <p class="entete-soustitre">Réservez le transport de votre patient en quelques instants</p>
     <div class="badge-partenaire">Mode partenaire</div>
