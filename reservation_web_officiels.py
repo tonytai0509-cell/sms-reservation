@@ -42,7 +42,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
-from flask import Flask, request, render_template_string, send_from_directory
+from flask import Flask, request, render_template_string, send_from_directory, redirect
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -980,9 +980,9 @@ def manifest_web_app():
 
 @app.route("/", methods=["GET"])
 def racine():
-    return (
-        "Les Taxis Officiels de Nice -- outil de saisie agenda operationnel"
-    ), 200
+    code = request.args.get("admin", "")
+    destination = f"/reserver?admin={code}" if code else "/reserver"
+    return redirect(destination)
 
 
 @app.route("/reserver", methods=["GET"])
