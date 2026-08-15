@@ -454,12 +454,12 @@ FORMULAIRE_RESERVATION_HTML = """
     height: auto; object-fit: contain; margin: 0 auto;
   }
   .entete-soustitre {
-    margin: 16px 0 0; color: #667; font-size: 16px; font-weight: 500;
+    margin: 14px 0 0; color: #667; font-size: 14px; font-weight: 400;
   }
   @media (max-width: 380px) {
     .logo-entete { width: min(84vw, 340px); }
     .entete { margin-bottom: 20px; }
-    .entete-soustitre { margin-top: 12px; font-size: 15px; }
+    .entete-soustitre { margin-top: 10px; font-size: 13px; }
   }
   .badge-partenaire {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
@@ -532,8 +532,8 @@ FORMULAIRE_RESERVATION_HTML = """
 
   .ligne-double { display: flex; gap: 10px; }
   .ligne-double > div { flex: 1; }
-  .ligne-double-souple { display: flex; flex-wrap: wrap; gap: 10px; }
-  .ligne-double-souple > div { flex: 1 1 140px; min-width: 140px; }
+  .ligne-double-souple { display: flex; flex-direction: column; gap: 10px; }
+  .ligne-double-souple > div { flex: none; width: 100%; min-width: 0; }
 
   .choix { display: flex; gap: 10px; margin: 6px 0 4px; }
   .choix label {
@@ -649,6 +649,7 @@ FORMULAIRE_RESERVATION_HTML = """
   .switch-option input:checked ~ .switch-track { background: var(--vert); }
   .switch-option input:checked ~ .switch-track .switch-thumb { transform: translateX(16px); }
   .switch-option svg.icone-switch { color: var(--vert); flex-shrink: 0; }
+  .switch-option-bleu input:checked ~ .switch-track { background: var(--navy); }
 </style>
 </head>
 <body>
@@ -704,7 +705,7 @@ FORMULAIRE_RESERVATION_HTML = """
           <label for="prenom">Prénom</label>
           <div class="champ-icone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
-            <input type="text" id="prenom" name="prenom" value="{{ valeurs.get('prenom', '') }}" required>
+            <input type="text" id="prenom" name="prenom" placeholder="Ex : Jean (pas obligatoire)" value="{{ valeurs.get('prenom', '') }}">
           </div>
         </div>
         <div>
@@ -926,7 +927,7 @@ FORMULAIRE_RESERVATION_HTML = """
         {% endif %}
       </div>
 
-      <label class="switch-option" for="heure_inconnue" style="margin-top:14px;">
+      <label class="switch-option switch-option-bleu" for="heure_inconnue" style="margin-top:14px;">
         <input type="checkbox" id="heure_inconnue" name="heure_inconnue" value="oui"
                {% if valeurs.get('heure_inconnue') %}checked{% endif %}>
         <span class="switch-track"><span class="switch-thumb"></span></span>
@@ -1264,7 +1265,7 @@ def valider_reservation():
     if role == "secretaire":
         if not all([patient_nom_complet, telephone_saisi, prise_en_charge, destination, date_str]):
             return page_erreur("Merci de remplir tous les champs du formulaire.")
-    elif not all([prenom, nom, telephone_saisi, prise_en_charge, destination, date_str]):
+    elif not all([nom, telephone_saisi, prise_en_charge, destination, date_str]):
         return page_erreur("Merci de remplir tous les champs du formulaire.")
 
     if role == "secretaire" and not nom_infirmiere:
