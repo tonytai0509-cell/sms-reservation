@@ -258,11 +258,12 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
 
     prix_min = donnees.get("prix_min")
     prix_max = donnees.get("prix_max")
-    prix_annonce = (
-        f"{formater_prix(prix_min)}€-{formater_prix(prix_max)}€"
-        if prix_min is not None and prix_max is not None
-        else None
-    )
+    if prix_min is not None and prix_max is not None and prix_max != prix_min:
+        prix_annonce = f"{formater_prix(prix_min)}€-{formater_prix(prix_max)}€"
+    elif prix_min is not None:
+        prix_annonce = f"{formater_prix(prix_min)}€"
+    else:
+        prix_annonce = None
 
     titre = (
         f"PC {heure_aff} M. {nom_pour_agenda} | "
@@ -685,7 +686,7 @@ FORMULAIRE_RESERVATION_HTML = """
                    value="{{ valeurs.get('prix_min', '') }}">
           </div>
           <div>
-            <input type="number" id="prix_max" name="prix_max" placeholder="Maxi (€)" min="0" step="1"
+            <input type="number" id="prix_max" name="prix_max" placeholder="Maxi (€) - vide si prix fixe" min="0" step="1"
                    value="{{ valeurs.get('prix_max', '') }}">
           </div>
         </div>
@@ -1041,14 +1042,14 @@ def valider_reservation():
     prix_min = None
     prix_max = None
     if type_course != "medical" and (prix_min_saisi or prix_max_saisi):
-        if not (prix_min_saisi and prix_max_saisi):
-            return page_erreur("Merci d'indiquer le prix mini ET le prix maxi, ou de laisser les deux vides.")
+        if not prix_min_saisi:
+            return page_erreur("Merci d'indiquer au moins le prix (mini, ou le prix fixe).")
         try:
             prix_min = float(prix_min_saisi.replace(",", "."))
-            prix_max = float(prix_max_saisi.replace(",", "."))
+            prix_max = float(prix_max_saisi.replace(",", ".")) if prix_max_saisi else None
         except ValueError:
             return page_erreur("Le prix annonce saisi n'est pas valide.")
-        if prix_min > prix_max:
+        if prix_max is not None and prix_min > prix_max:
             return page_erreur("Le prix mini ne peut pas etre superieur au prix maxi.")
 
     if role == "secretaire":
