@@ -251,6 +251,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
 
     fin_dt = debut_dt + timedelta(hours=1)
     type_tag = "[MED]" if donnees.get("type") == "medical" else "[PRIVE]"
+    emoji_type = "💊" if donnees.get("type") == "medical" else "🚕"
     telephone = donnees.get("telephone") or "(non renseigne)"
     heure_aff = debut_dt.strftime("%Hh%M")
     heure_rdv_aff = donnees.get("heure_rdv") or heure_aff
@@ -266,7 +267,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         prix_annonce = None
 
     titre = (
-        f"PC {heure_aff} M. {nom_pour_agenda} | "
+        f"PC {heure_aff} {emoji_type} M. {nom_pour_agenda} | "
         f"PC : {donnees['prise_en_charge']} | "
         f"DEST : {donnees['destination']} | "
         + (f"PRIX ANNONCE : {prix_annonce} | " if prix_annonce else "")
