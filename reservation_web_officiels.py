@@ -276,7 +276,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + (f" [{donnees['nom_infirmiere']}]" if donnees.get("nom_infirmiere") else "")
         + (" [ACCOMPAGNANT]" if donnees.get("accompagnant") else "")
         + (" [BT AU RETOUR]" if donnees.get("bto_retour") else "")
-        + (f" [CHAUFFEUR: {donnees['chauffeur']}]" if donnees.get("chauffeur") else "")
+        + (f" [PRISE RDV: {donnees['chauffeur']}]" if donnees.get("chauffeur") else "")
     ).upper()
     role = donnees.get("role")
     source_label = "reservation prise par Tony (admin)" if role == "admin" else "reservation prise par une/un secretaire"
@@ -292,7 +292,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + (f"\nINFIRMIERE : {donnees['nom_infirmiere']}" if donnees.get("nom_infirmiere") else "")
         + ("\nACCOMPAGNANT : OUI" if donnees.get("accompagnant") else "")
         + ("\nBT : AU RETOUR UNIQUEMENT" if donnees.get("bto_retour") else "")
-        + (f"\nCHAUFFEUR : {donnees['chauffeur']}" if donnees.get("chauffeur") else "")
+        + (f"\nPRISE RDV : {donnees['chauffeur']}" if donnees.get("chauffeur") else "")
     ).upper()
 
     try:
@@ -610,7 +610,7 @@ FORMULAIRE_RESERVATION_HTML = """
                value="{{ valeurs.get('telephone', '') }}" required>
       </div>
 
-      <label for="chauffeur">Prenom du chauffeur (qui a pris l'appel)</label>
+      <label for="chauffeur">Prise RDV (prenom)</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>
         <input type="text" id="chauffeur" name="chauffeur" placeholder="Ex : Karim (facultatif)"
