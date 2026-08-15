@@ -1327,4 +1327,30 @@ def valider_reservation():
             "Merci d'appeler directement la centrale pour reserver votre taxi."
         )
 
-    i
+    if mode_admin:
+        if role == "secretaire":
+            # Mode partenaire/secretaire : pas de SMS au client, mais on
+            # notifie quand meme Tony par email pour qu'il soit au courant.
+            envoyer_email_confirmation(donnees, reference)
+        log.info(
+            "Reservation %s creee : %s (ref %s, tel %s, event %s) -- pas de SMS envoye",
+            (role or "admin").upper(), nom_complet, reference, telephone, event_id,
+        )
+    else:
+        envoyer_email_confirmation(donnees, reference)
+        texte_sms = construire_sms_confirmation(donnees, reference, heure_estimee)
+        envoyer_sms(telephone, texte_sms)
+        log.info(
+            "Reservation web creee : %s (ref %s, tel %s, event %s)",
+            nom_complet, reference, telephone, event_id,
+        )
+
+    return render_template_string(
+        CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=reference, mode_admin=mode_admin,
+        role=role, admin_code=code_saisi if role else "",
+    )
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
