@@ -276,6 +276,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + (f" [{donnees['nom_infirmiere']}]" if donnees.get("nom_infirmiere") else "")
         + (" [ACCOMPAGNANT]" if donnees.get("accompagnant") else "")
         + (" [BT AU RETOUR]" if donnees.get("bto_retour") else "")
+        + (f" [CHAUFFEUR: {donnees['chauffeur']}]" if donnees.get("chauffeur") else "")
     ).upper()
     role = donnees.get("role")
     source_label = "reservation prise par Tony (admin)" if role == "admin" else "reservation prise par une/un secretaire"
@@ -291,6 +292,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + (f"\nINFIRMIERE : {donnees['nom_infirmiere']}" if donnees.get("nom_infirmiere") else "")
         + ("\nACCOMPAGNANT : OUI" if donnees.get("accompagnant") else "")
         + ("\nBT : AU RETOUR UNIQUEMENT" if donnees.get("bto_retour") else "")
+        + (f"\nCHAUFFEUR : {donnees['chauffeur']}" if donnees.get("chauffeur") else "")
     ).upper()
 
     try:
@@ -606,6 +608,13 @@ FORMULAIRE_RESERVATION_HTML = """
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
         <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
                value="{{ valeurs.get('telephone', '') }}" required>
+      </div>
+
+      <label for="chauffeur">Prenom du chauffeur (qui a pris l'appel)</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>
+        <input type="text" id="chauffeur" name="chauffeur" placeholder="Ex : Karim (facultatif)"
+               value="{{ valeurs.get('chauffeur', '') }}">
       </div>
 
       {% if role == 'secretaire' %}
@@ -1049,6 +1058,7 @@ def valider_reservation():
     accompagnant = request.form.get("accompagnant") == "oui"
     bto_retour = request.form.get("bto_retour") == "oui"
     nom_infirmiere = (request.form.get("nom_infirmiere") or "").strip()
+    chauffeur = (request.form.get("chauffeur") or "").strip()
     prise_en_charge = (request.form.get("prise_en_charge") or "").strip()
     destination = (request.form.get("destination") or "").strip()
     date_str = (request.form.get("date") or "").strip()
@@ -1099,6 +1109,7 @@ def valider_reservation():
         "nom_agenda": nom_pour_agenda,
         "role": role,
         "nom_infirmiere": nom_infirmiere or None,
+        "chauffeur": chauffeur or None,
         "accompagnant": accompagnant,
         "bto_retour": bto_retour,
         "telephone": telephone,
