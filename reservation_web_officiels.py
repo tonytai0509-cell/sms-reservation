@@ -269,7 +269,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         f"PC {heure_aff} M. {nom_pour_agenda} | "
         f"PC : {donnees['prise_en_charge']} | "
         f"DEST : {donnees['destination']} | "
-        + (f"PRIX : {prix_annonce} | " if prix_annonce else "")
+        + (f"PRIX ANNONCE : {prix_annonce} | " if prix_annonce else "")
         + f"RDV : {heure_rdv_aff} {type_tag} | "
         f"TEL : {telephone} | REF : {reference}"
         + (f" [{donnees['nom_infirmiere']}]" if donnees.get("nom_infirmiere") else "")
@@ -889,9 +889,6 @@ CONFIRMATION_RESERVATION_HTML = """
       {% endif %}
     </table>
     <div class="ref">Reference : {{ reference }}</div>
-    <p style="font-size:13px;color:var(--texte-secondaire);margin-top:14px;font-weight:600;">
-      Aucune notification envoyee au client (pas de SMS/email sur cet outil).
-    </p>
     <a class="retour" href="/reserver?admin={{ admin_code }}">Ajouter une autre course</a>
   </div>
 </body>
