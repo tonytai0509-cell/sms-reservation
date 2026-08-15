@@ -459,7 +459,8 @@ FORMULAIRE_RESERVATION_HTML = """
     font-weight: 800; letter-spacing: 0.2px; margin: 0 0 4px;
     font-size: 18px; line-height: 1.2;
     color: var(--navy);
-    text-shadow: 0 0 2px rgba(13,42,82,0.5), 0 0 6px rgba(13,42,82,0.3), 0 0 14px rgba(13,42,82,0.18);
+    -webkit-text-stroke: 0.3px var(--navy);
+    text-shadow: 0 0 4px rgba(13,42,82,0.3), 0 0 10px rgba(13,42,82,0.16);
   }
   .entete h1::before {
     content: attr(data-text);
@@ -470,14 +471,14 @@ FORMULAIRE_RESERVATION_HTML = """
       transparent 0%, transparent 46%, #fff 50%, transparent 54%, transparent 100%
     );
     background-size: 320% 100%;
-    background-position: -140% 0;
+    background-position: 260% 0;
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
     animation: neon-eclat 6.5s linear infinite;
     pointer-events: none;
   }
   @keyframes neon-eclat {
-    0% { background-position: -140% 0; }
-    100% { background-position: 260% 0; }
+    0% { background-position: 260% 0; }
+    100% { background-position: -140% 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     .entete h1::before { animation: none; display: none; }
