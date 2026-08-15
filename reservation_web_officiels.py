@@ -742,17 +742,37 @@ FORMULAIRE_RESERVATION_HTML = """
                value="{{ valeurs.get('date', '') }}" required>
       </div>
 
-      <label for="heure_rdv">Heure de rendez-vous</label>
-      <div class="champ-icone">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
+      {% if role != 'secretaire' and valeurs.get('type_course', 'prive') == 'prive' %}
+      <div id="bloc_heure_pc">
+        <label for="heure_pc">Heure de prise en charge</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}" required>
+        </div>
       </div>
-
-      <label for="heure_pc">Heure de prise en charge</label>
-      <div class="champ-icone">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}" required>
+      <div id="bloc_heure_rdv">
+        <label for="heure_rdv">Heure de rendez-vous</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
+        </div>
       </div>
+      {% else %}
+      <div id="bloc_heure_rdv">
+        <label for="heure_rdv">Heure de rendez-vous</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <input type="time" id="heure_rdv" name="heure_rdv" value="{{ valeurs.get('heure_rdv', '') }}">
+        </div>
+      </div>
+      <div id="bloc_heure_pc">
+        <label for="heure_pc">Heure de prise en charge</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <input type="time" id="heure_pc" name="heure_pc" value="{{ valeurs.get('heure_pc', '') }}" required>
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     <button type="submit" class="envoyer">
@@ -776,9 +796,18 @@ FORMULAIRE_RESERVATION_HTML = """
   const optionsMedical = document.getElementById('options_medical');
   const optionsPrive = document.getElementById('options_prive');
   if (radioPrive && radioMedical) {
+    const blocHeureRdv = document.getElementById('bloc_heure_rdv');
+    const blocHeurePc = document.getElementById('bloc_heure_pc');
     function majOptionsMedical() {
       if (optionsMedical) { optionsMedical.style.display = radioMedical.checked ? 'block' : 'none'; }
       if (optionsPrive) { optionsPrive.style.display = radioPrive.checked ? 'block' : 'none'; }
+      if (blocHeureRdv && blocHeurePc) {
+        if (radioPrive.checked) {
+          blocHeurePc.parentElement.insertBefore(blocHeurePc, blocHeureRdv);
+        } else {
+          blocHeureRdv.parentElement.insertBefore(blocHeureRdv, blocHeurePc);
+        }
+      }
     }
     radioPrive.addEventListener('change', majOptionsMedical);
     radioMedical.addEventListener('change', majOptionsMedical);
