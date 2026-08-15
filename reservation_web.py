@@ -778,14 +778,18 @@ FORMULAIRE_RESERVATION_HTML = """
       </div>
 
       <div id="options_medical" class="options-medical" style="display: {% if valeurs.get('type_course') == 'medical' %}block{% else %}none{% endif %};">
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:#777; margin:10px 0 0;">
-          <input type="checkbox" id="accompagnant" name="accompagnant" value="oui" style="width:auto;"
+        <label class="switch-option" for="accompagnant">
+          <input type="checkbox" id="accompagnant" name="accompagnant" value="oui"
                  {% if valeurs.get('accompagnant') %}checked{% endif %}>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <svg class="icone-switch" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
           J'aurai un accompagnant avec moi
         </label>
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:14px; color:#777; margin:8px 0 0;">
-          <input type="checkbox" id="bto_retour" name="bto_retour" value="oui" style="width:auto;"
+        <label class="switch-option" for="bto_retour">
+          <input type="checkbox" id="bto_retour" name="bto_retour" value="oui"
                  {% if valeurs.get('bto_retour') %}checked{% endif %}>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <svg class="icone-switch" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
           Je donnerai mon bon de transport au retour
         </label>
       </div>
