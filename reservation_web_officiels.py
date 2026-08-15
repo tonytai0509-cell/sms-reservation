@@ -610,7 +610,7 @@ FORMULAIRE_RESERVATION_HTML = """
                value="{{ valeurs.get('telephone', '') }}" required>
       </div>
 
-      <label for="chauffeur">Prise RDV (prenom)</label>
+      <label for="chauffeur">Chauffeur qui a pris le rendez-vous</label>
       <div class="champ-icone">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>
         <input type="text" id="chauffeur" name="chauffeur" placeholder="Ex : Karim (facultatif)"
