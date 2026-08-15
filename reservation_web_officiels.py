@@ -516,9 +516,9 @@ FORMULAIRE_RESERVATION_HTML = """
     background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(23,17,17,0.25);
     transition: transform .18s ease;
   }
-  .toggle-switch input:checked + .toggle-piste { background: var(--rouge); }
+  .toggle-switch input:checked + .toggle-piste { background: #1e8e3e; }
   .toggle-switch input:checked + .toggle-piste::before { transform: translateX(18px); }
-  .toggle-switch input:focus-visible + .toggle-piste { box-shadow: 0 0 0 3px var(--rouge-fond-leger); }
+  .toggle-switch input:focus-visible + .toggle-piste { box-shadow: 0 0 0 3px rgba(30, 142, 62, 0.18); }
   .toggle-texte { color: var(--noir); }
 
   /* ---------- Bouton principal ---------- */
