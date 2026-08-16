@@ -371,38 +371,33 @@ FORMULAIRE_RESERVATION_HTML = """
 
   /* ---------- En-tete ---------- */
   .entete { text-align: center; padding-top: 0; margin-bottom: 18px; }
-  .entete .logo-aigle {
-    width: 76px; height: 76px; object-fit: contain; margin: 0 auto 2px; display: block;
-  }
-  .entete h1 {
+  .logo-entete-conteneur {
     position: relative; display: inline-block;
-    font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.5px; margin: 0 0 14px;
-    font-size: clamp(21px, 6.2vw, 28px); line-height: 1.15;
-    color: var(--rouge);
-    -webkit-text-stroke: 0.3px var(--rouge);
-    text-shadow: 0 0 4px rgba(179,38,32,0.3), 0 0 10px rgba(179,38,32,0.16);
+    width: min(88vw, 480px); max-width: 100%; margin: 0 auto;
   }
-  .entete h1::before {
-    content: attr(data-text);
-    position: absolute; inset: 0;
-    text-transform: uppercase; letter-spacing: inherit;
+  .logo-entete {
+    display: block; width: 100%; height: auto; object-fit: contain;
+  }
+  .logo-entete-brillance {
+    position: absolute; inset: 0; pointer-events: none;
+    -webkit-mask-image: url(/logo-horizontal.png); mask-image: url(/logo-horizontal.png);
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
     background: linear-gradient(
       100deg,
-      transparent 0%, transparent 46%, #FFFDF8 50%, transparent 54%, transparent 100%
+      transparent 0%, transparent 46%, rgba(255,255,255,0.95) 50%, transparent 54%, transparent 100%
     );
     background-size: 320% 100%;
     background-position: 260% 0;
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
-    animation: neon-eclat 6.5s linear infinite;
-    pointer-events: none;
+    animation: neon-eclat-logo 6.5s linear infinite;
   }
-  @keyframes neon-eclat {
+  @keyframes neon-eclat-logo {
     0% { background-position: 260% 0; }
     100% { background-position: -140% 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .entete h1::before { animation: none; display: none; }
+    .logo-entete-brillance { animation: none; display: none; }
   }
   .badge-role {
     display: inline-flex; align-items: center; gap: 6px;
@@ -555,8 +550,10 @@ FORMULAIRE_RESERVATION_HTML = """
 <div class="page">
 
   <div class="entete">
-    <img class="logo-aigle" src="/logo.png" alt="Les Taxis Officiels de Nice">
-    <h1 data-text="Les Taxis Officiels de Nice">Les Taxis Officiels de Nice</h1>
+    <div class="logo-entete-conteneur">
+      <img class="logo-entete" src="/logo-horizontal.png" alt="Les Taxis Officiels de Nice">
+      <div class="logo-entete-brillance" aria-hidden="true"></div>
+    </div>
     <div class="badge-role">
       {% if role == 'secretaire' %}Mode secretaire{% else %}Mode admin{% endif %}
     </div>
@@ -968,12 +965,12 @@ ACCES_REFUSE_HTML = """
 """
 
 
-@app.route("/logo.png", methods=["GET"])
-def logo_aigle():
-    """Sert le logo depuis un fichier image separe (et non plus en base64
-    dans ce fichier .py) -- evite les problemes de troncature rencontres
-    lors de l'upload mobile d'un fichier texte contenant une ligne enorme."""
-    return send_from_directory(app.root_path, "logo_aigle.png", mimetype="image/png")
+@app.route("/logo-horizontal.png", methods=["GET"])
+def logo_horizontal():
+    """Sert le logo d'en-tete depuis un fichier image separe (et non en
+    base64 dans ce fichier .py) -- evite les problemes de troncature deja
+    rencontres avec ce fichier lors d'une edition en ligne sur GitHub."""
+    return send_from_directory(app.root_path, "logo-horizontal-officiels.png", mimetype="image/png")
 
 
 @app.route("/icon-<int:taille>.png", methods=["GET"])
