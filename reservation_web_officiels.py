@@ -277,6 +277,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + (" [ACCOMPAGNANT]" if donnees.get("accompagnant") else "")
         + (" [BT AU RETOUR]" if donnees.get("bto_retour") else "")
         + (f" [PRISE RDV: {donnees['chauffeur']}]" if donnees.get("chauffeur") else "")
+        + (f" [{donnees['info_utile']}]" if donnees.get("info_utile") else "")
     ).upper()
 
     description = (
@@ -290,6 +291,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + ("\nACCOMPAGNANT : OUI" if donnees.get("accompagnant") else "")
         + ("\nBT : AU RETOUR UNIQUEMENT" if donnees.get("bto_retour") else "")
         + (f"\nPRISE RDV : {donnees['chauffeur']}" if donnees.get("chauffeur") else "")
+        + (f"\nINFO : {donnees['info_utile']}" if donnees.get("info_utile") else "")
     ).upper()
 
     try:
@@ -694,6 +696,13 @@ FORMULAIRE_RESERVATION_HTML = """
                    value="{{ valeurs.get('prix_max', '') }}">
           </div>
         </div>
+
+        <label for="info_utile" style="margin-top: 10px;">Info utile (facultatif)</label>
+        <div class="champ-icone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+          <input type="text" id="info_utile" name="info_utile" placeholder="Ex : 4 personnes, siege auto..."
+                 value="{{ valeurs.get('info_utile', '') }}">
+        </div>
       </div>
       {% endif %}
 
@@ -1061,6 +1070,7 @@ def valider_reservation():
     heure_inconnue = request.form.get("heure_inconnue") == "oui"
     prix_min_saisi = (request.form.get("prix_min") or "").strip()
     prix_max_saisi = (request.form.get("prix_max") or "").strip()
+    info_utile_saisi = (request.form.get("info_utile") or "").strip()
 
     if role == "secretaire":
         if not all([patient_nom_complet, telephone_saisi, prise_en_charge, destination, date_str]):
@@ -1082,6 +1092,8 @@ def valider_reservation():
             return page_erreur("Le prix annonce saisi n'est pas valide.")
         if prix_max is not None and prix_min > prix_max:
             return page_erreur("Le prix mini ne peut pas etre superieur au prix maxi.")
+
+    info_utile = info_utile_saisi if type_course != "medical" and info_utile_saisi else None
 
     if role == "secretaire":
         nom_complet = patient_nom_complet
@@ -1111,6 +1123,7 @@ def valider_reservation():
         "destination": destination,
         "prix_min": prix_min,
         "prix_max": prix_max,
+        "info_utile": info_utile,
         "heure": None,
         "heure_rdv": None,
         "heure_iso": None,
