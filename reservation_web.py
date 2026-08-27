@@ -34,7 +34,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
-from flask import Flask, request, render_template_string, send_from_directory, redirect
+from flask import Flask, request, render_template_string, send_from_directory, redirect, jsonify
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -60,6 +60,11 @@ else:
     SEND_URL = "https://api.sms-gate.app/3rdparty/v1/messages"
 
 MAX_RESERVATIONS_ACTIVES = int(os.environ.get("MAX_RESERVATIONS_ACTIVES", "5"))
+
+# Plafond de securite pour la recurrence admin (semaines x jours coches) :
+# evite qu'une combinaison extreme ne cree des centaines d'evenements et ne
+# fasse trainer la requete.
+MAX_OCCURRENCES_RECURRENCE = 60
 
 # Code secret pour le mode admin (voir /reserver?admin=CE_CODE). Changez-le
 # en ajoutant une variable ADMIN_ACCESS_CODE sur Railway pour ce service.
@@ -226,6 +231,74 @@ def rechercher_evenements(texte_recherche: str, seulement_futur: bool = True) ->
     except Exception as e:
         log.error("Erreur recherche evenements Agenda : %s", e)
         return []
+
+
+_MOTIF_NOM_TITRE = re.compile(r"\bM\.?\s+([A-ZÀ-ÖØ-Ý0-9'\-\s]+?)\s*\|", re.IGNORECASE)
+_MOTIF_PC_DESCRIPTION = re.compile(r"^\s*PC\s*:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+
+
+def rechercher_client_par_telephone(telephone: str) -> dict | None:
+    """Retrouve le dernier passage connu pour ce numero (n'importe quelle
+    course deja creee, admin ou client) afin de pre-remplir nom/prenom/
+    adresse de prise en charge sur la page de reservation. Pas de base de
+    donnees dediee ici : on reutilise l'agenda Google lui-meme comme
+    historique, via la meme recherche plein texte que la detection de
+    doublon (rechercher_evenements)."""
+    if not telephone:
+        return None
+    evenements = rechercher_evenements(telephone, seulement_futur=False)
+    # La recherche plein texte de Google peut remonter des faux positifs
+    # (numero partiellement present ailleurs) : on ne garde que les
+    # evenements qui mentionnent vraiment ce numero dans leur description.
+    correspondants = [e for e in evenements if telephone.upper() in (e.get("description") or "").upper()]
+    if not correspondants:
+        return None
+
+    def date_debut(e: dict) -> str:
+        return e.get("start", {}).get("dateTime") or e.get("start", {}).get("date") or ""
+
+    plus_recent = max(correspondants, key=date_debut)
+    description = plus_recent.get("description") or ""
+    titre = plus_recent.get("summary") or ""
+
+    correspondance_pc = _MOTIF_PC_DESCRIPTION.search(description)
+    prise_en_charge = correspondance_pc.group(1).strip() if correspondance_pc else ""
+
+    correspondance_nom = _MOTIF_NOM_TITRE.search(titre)
+    prenom, nom = "", ""
+    if correspondance_nom:
+        # Le titre stocke "NOM PRENOM" (voir creer_evenement_agenda,
+        # nom_pour_agenda) : le dernier mot est presume etre le prenom,
+        # tout le reste le nom - fonctionne pour l'immense majorite des cas
+        # (prenom simple), quitte a etre corrige a la main si besoin.
+        mots = correspondance_nom.group(1).split()
+        if len(mots) >= 2:
+            prenom = mots[-1].title()
+            nom = " ".join(mots[:-1]).title()
+        elif mots:
+            nom = mots[0].title()
+
+    if not prise_en_charge and not nom:
+        return None
+    return {"prenom": prenom, "nom": nom, "prise_en_charge": prise_en_charge}
+
+
+def calculer_occurrences(date_debut, jours_semaine: list[int], nb_semaines: int) -> list:
+    """Toutes les dates (objets date) des jours de semaine choisis, sur
+    "nb_semaines" semaines a partir de la semaine de date_debut, en
+    ignorant les dates avant date_debut (ex : on part un mercredi et on a
+    aussi coche lundi -> le lundi de cette semaine-la est deja passe).
+    date_debut.weekday() vaut deja 0 pour lundi ... 6 pour dimanche, comme
+    les valeurs choisies dans le formulaire."""
+    lundi_semaine_0 = date_debut - timedelta(days=date_debut.weekday())
+    dates = []
+    for semaine in range(nb_semaines):
+        for jour in jours_semaine:
+            d = lundi_semaine_0 + timedelta(days=semaine * 7 + jour)
+            if d >= date_debut:
+                dates.append(d)
+    dates.sort()
+    return dates[:MAX_OCCURRENCES_RECURRENCE]
 
 
 def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, str | None]:
@@ -673,6 +746,23 @@ FORMULAIRE_RESERVATION_HTML = """
   .switch-option input:checked ~ .switch-track .switch-thumb { transform: translateX(16px); }
   .switch-option svg.icone-switch { color: var(--vert); flex-shrink: 0; }
   .switch-option-bleu input:checked ~ .switch-track { background: var(--navy); }
+
+  .client-trouve {
+    margin: -2px 0 14px; padding: 8px 12px; border-radius: 10px;
+    background: var(--vert-clair); color: var(--vert); font-size: 13px; font-weight: 700;
+  }
+
+  .bloc-repetition { display: none; margin-top: 10px; }
+  .bloc-repetition.ouvert { display: block; }
+  .jours-semaine { display: flex; gap: 6px; margin: 6px 0 4px; }
+  .jours-semaine label {
+    flex: 1; margin: 0; text-align: center; padding: 10px 2px; border: 1.5px solid var(--bordure);
+    border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; color: #667;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+  .jours-semaine input { display: none; }
+  .jours-semaine label:has(input:checked) { border-color: var(--navy); background: #eef2f7; color: var(--navy); }
+  .champ-simple { max-width: 100px; }
 </style>
 </head>
 <body>
@@ -725,7 +815,22 @@ FORMULAIRE_RESERVATION_HTML = """
         <input type="text" id="patient_nom_complet" name="patient_nom_complet" placeholder="Ex. : Dupont Jean"
                value="{{ valeurs.get('patient_nom_complet', '') }}" required>
       </div>
+      <label for="telephone">Telephone de contact</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
+        <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
+               value="{{ valeurs.get('telephone', '') }}" required>
+      </div>
       {% else %}
+      <!-- Telephone en premier : la saisie declenche la reconnaissance
+           client (voir /api/client) qui pre-remplit prenom/nom/adresse. -->
+      <label for="telephone">Téléphone</label>
+      <div class="champ-icone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
+        <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
+               value="{{ valeurs.get('telephone', '') }}" required>
+      </div>
+      <p id="client_trouve" class="client-trouve" style="display:none;"></p>
       <div class="ligne-double">
         <div>
           <label for="prenom">Prénom</label>
@@ -743,13 +848,6 @@ FORMULAIRE_RESERVATION_HTML = """
         </div>
       </div>
       {% endif %}
-
-      <label for="telephone">{% if role == 'secretaire' %}Telephone de contact{% else %}Téléphone{% endif %}</label>
-      <div class="champ-icone">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.37a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.71-1.11a2 2 0 0 1 2.11-.45c.77.24 1.56.42 2.37.54A2 2 0 0 1 22 16.92z"/></svg>
-        <input type="tel" id="telephone" name="telephone" placeholder="06 12 34 56 78"
-               value="{{ valeurs.get('telephone', '') }}" required>
-      </div>
 
       {% if role == 'secretaire' %}
       <div id="bloc_infirmiere_affichage" class="infirmiere-affichage" style="display:none;">
@@ -963,6 +1061,31 @@ FORMULAIRE_RESERVATION_HTML = """
         <span class="switch-track"><span class="switch-thumb"></span></span>
         Calcul automatique de l'heure de prise en charge
       </label>
+
+      {% if role == 'admin' %}
+      <label class="switch-option" for="repeter" style="margin-top:14px;">
+        <input type="checkbox" id="repeter" name="repeter" value="oui">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+        <svg class="icone-switch" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 17v-5h5"/></svg>
+        Se répète chaque semaine, mêmes jours, même heure
+      </label>
+      <div id="bloc_repetition" class="bloc-repetition">
+        <label>Jours à répéter</label>
+        <div class="jours-semaine" id="jours_semaine">
+          <label><input type="checkbox" name="jours" value="0"><span>Lun</span></label>
+          <label><input type="checkbox" name="jours" value="1"><span>Mar</span></label>
+          <label><input type="checkbox" name="jours" value="2"><span>Mer</span></label>
+          <label><input type="checkbox" name="jours" value="3"><span>Jeu</span></label>
+          <label><input type="checkbox" name="jours" value="4"><span>Ven</span></label>
+          <label><input type="checkbox" name="jours" value="5"><span>Sam</span></label>
+          <label><input type="checkbox" name="jours" value="6"><span>Dim</span></label>
+        </div>
+        <label for="repeter_semaines">Pendant combien de semaines ?</label>
+        <div class="champ-icone champ-simple">
+          <input type="number" id="repeter_semaines" name="repeter_semaines" min="2" max="26" step="1" value="4" style="padding-left:14px !important;">
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     <button type="submit" class="envoyer">
@@ -1116,6 +1239,63 @@ FORMULAIRE_RESERVATION_HTML = """
       }
     });
   }
+
+  // Reconnaissance client par telephone (page publique + admin, jamais
+  // secretaire) : voir /api/client, qui relit l'agenda Google lui-meme
+  // comme historique. N'ecrase jamais un champ deja rempli a la main.
+  const champTelephone = document.getElementById('telephone');
+  const champClientTrouve = document.getElementById('client_trouve');
+  const champPrenom = document.getElementById('prenom');
+  const champNomClient = document.getElementById('nom');
+  const champPriseEnCharge = document.getElementById('prise_en_charge');
+  if (champTelephone && champClientTrouve && champPrenom && champNomClient && champPriseEnCharge) {
+    let minuteurRecherche = null;
+    let dernierTelephoneRecherche = '';
+
+    async function rechercherClient() {
+      const cle = champTelephone.value.replace(/\D/g, '');
+      if (cle.length < 9 || cle === dernierTelephoneRecherche) return;
+      dernierTelephoneRecherche = cle;
+      try {
+        const reponse = await fetch('/api/client?telephone=' + encodeURIComponent(champTelephone.value));
+        const donnees = await reponse.json();
+        if (!donnees.trouve) { champClientTrouve.style.display = 'none'; return; }
+        if (!champPrenom.value.trim() && donnees.prenom) champPrenom.value = donnees.prenom;
+        if (!champNomClient.value.trim() && donnees.nom) champNomClient.value = donnees.nom;
+        if (!champPriseEnCharge.value.trim() && donnees.prise_en_charge) champPriseEnCharge.value = donnees.prise_en_charge;
+        champClientTrouve.textContent = '✓ Client reconnu — coordonnees pre-remplies (verifiez avant d’envoyer).';
+        champClientTrouve.style.display = 'block';
+      } catch (e) {
+        // Commodite seulement : une erreur reseau ne doit pas gener la saisie.
+      }
+    }
+
+    champTelephone.addEventListener('input', function () {
+      champClientTrouve.style.display = 'none';
+      clearTimeout(minuteurRecherche);
+      minuteurRecherche = setTimeout(rechercherClient, 400);
+    });
+    champTelephone.addEventListener('blur', rechercherClient);
+  }
+
+  // Recurrence hebdomadaire (admin uniquement) : coche automatiquement le
+  // jour de la date choisie a l'ouverture, le chauffeur peut en ajouter
+  // d'autres (ex : lundi + mardi + jeudi + vendredi a la meme heure).
+  const caseRepeter = document.getElementById('repeter');
+  const blocRepetition = document.getElementById('bloc_repetition');
+  if (caseRepeter && blocRepetition) {
+    caseRepeter.addEventListener('change', function () {
+      blocRepetition.classList.toggle('ouvert', caseRepeter.checked);
+      const dejaCoche = blocRepetition.querySelector('input[name="jours"]:checked');
+      if (caseRepeter.checked && !dejaCoche) {
+        const champDate = document.getElementById('date');
+        const d = champDate && champDate.value ? new Date(champDate.value + 'T00:00:00') : new Date();
+        const jourIso = (d.getDay() + 6) % 7;
+        const cases = blocRepetition.querySelectorAll('input[name="jours"]');
+        if (cases[jourIso]) cases[jourIso].checked = true;
+      }
+    });
+  }
 </script>
 </body>
 </html>
@@ -1157,17 +1337,28 @@ CONFIRMATION_RESERVATION_HTML = """
 <body>
   <div class="carte">
     <div class="coche">&#10003;</div>
-    <h1>Votre taxi est reserve</h1>
+    <h1>{% if occurrences %}{{ occurrences|length }} réservations créées{% else %}Votre taxi est reserve{% endif %}</h1>
     <table>
       <tr><td class="libelle">Nom</td><td>{{ donnees['nom'] }}</td></tr>
       <tr><td class="libelle">Prise en charge</td><td>{{ donnees['prise_en_charge'] }}</td></tr>
       <tr><td class="libelle">Destination</td><td>{{ donnees['destination'] }}</td></tr>
+      {% if not occurrences %}
       <tr><td class="libelle">Heure de passage</td><td>{{ donnees['heure'] }}</td></tr>
       {% if donnees.get('heure_rdv') %}
       <tr><td class="libelle">Rendez-vous</td><td>{{ donnees['heure_rdv'] }}</td></tr>
       {% endif %}
+      {% endif %}
     </table>
+    {% if occurrences %}
+    <table>
+      {% for occ in occurrences %}
+      <tr><td class="libelle">{{ occ.date.strftime('%d/%m/%Y') }} à {{ occ.heure }}</td><td>{{ occ.reference }}</td></tr>
+      {% endfor %}
+    </table>
+    <p style="font-size:13px;color:#777;margin-top:10px;">Même jours de semaine, même heure, chaque semaine.</p>
+    {% else %}
     <div class="ref">Reference : {{ reference }}</div>
+    {% endif %}
     {% if mode_admin %}
     <p style="font-size:13px;color:#0d2a52;margin-top:14px;font-weight:600;">
       Ajoutee a l'agenda -- {% if role == 'secretaire' %}mode partenaire{% else %}mode admin{% endif %}, aucun SMS envoye au client.
@@ -1248,6 +1439,20 @@ def racine():
     code = request.args.get("admin", "")
     destination = f"/reserver?admin={code}" if code else "/reserver"
     return redirect(destination)
+
+
+@app.route("/api/client", methods=["GET"])
+def api_client():
+    """Reconnaissance client par telephone (page client + admin, jamais
+    secretaire) : appelee en Ajax des que le numero saisi ressemble a un
+    numero complet, pour pre-remplir prenom/nom/adresse de prise en charge."""
+    telephone = normaliser_numero_francais((request.args.get("telephone") or "").strip())
+    if len(re.sub(r"\D", "", telephone)) < 9:
+        return jsonify({"trouve": False})
+    client = rechercher_client_par_telephone(telephone)
+    if not client:
+        return jsonify({"trouve": False})
+    return jsonify({"trouve": True, **client})
 
 
 @app.route("/reserver", methods=["GET"])
@@ -1389,6 +1594,52 @@ def valider_reservation():
         donnees["heure"] = f"{pc_h:02d}h{pc_m:02d}"
         pc_dt = datetime.fromisoformat(date_str).replace(hour=pc_h, minute=pc_m)
         donnees["heure_iso"] = pc_dt.isoformat()
+
+    # Recurrence hebdomadaire (admin uniquement) : cree un evenement par
+    # date calculee (memes jours de semaine, meme heure, plusieurs
+    # semaines de suite) au lieu d'une seule reservation. Action admin de
+    # confiance -> pas de verification anti-abus/anti-doublon ici, elle
+    # n'aurait pas de sens pour une creation en lot volontaire.
+    if role == "admin" and request.form.get("repeter") == "oui":
+        jours_semaine = [int(j) for j in request.form.getlist("jours") if j.isdigit()]
+        if not jours_semaine:
+            return page_erreur("Selectionnez au moins un jour de la semaine a repeter.")
+        try:
+            nb_semaines = max(1, min(26, int(request.form.get("repeter_semaines") or 4)))
+        except ValueError:
+            nb_semaines = 4
+
+        date_depart = datetime.fromisoformat(date_str).date()
+        dates_occurrences = calculer_occurrences(date_depart, jours_semaine, nb_semaines)
+        heure_reference = datetime.fromisoformat(donnees["heure_iso"])
+
+        occurrences = []
+        for jour in dates_occurrences:
+            donnees_occurrence = dict(donnees)
+            donnees_occurrence["heure_iso"] = heure_reference.replace(
+                year=jour.year, month=jour.month, day=jour.day
+            ).isoformat()
+            reference_occurrence = generer_reference()
+            succes, detail, event_id = creer_evenement_agenda(donnees_occurrence, reference_occurrence)
+            if not succes:
+                log.error("Echec creation reservation recurrente (%s) : %s", jour, detail)
+                continue
+            occurrences.append({"date": jour, "heure": donnees["heure"], "reference": reference_occurrence})
+            log.info(
+                "Reservation ADMIN recurrente creee : %s (ref %s, tel %s, event %s)",
+                nom_complet, reference_occurrence, telephone, event_id,
+            )
+
+        if not occurrences:
+            return page_erreur(
+                "Aucune des reservations recurrentes n'a pu etre creee. "
+                "Verifiez la configuration de l'agenda et reessayez."
+            )
+        return render_template_string(
+            CONFIRMATION_RESERVATION_HTML, donnees=donnees, reference=occurrences[-1]["reference"],
+            occurrences=occurrences, mode_admin=mode_admin, role=role,
+            admin_code=code_saisi if role else "",
+        )
 
     reservations_en_cours = rechercher_evenements(telephone, seulement_futur=True)
     if len(reservations_en_cours) >= MAX_RESERVATIONS_ACTIVES:
