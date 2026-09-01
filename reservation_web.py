@@ -30,6 +30,7 @@ import logging
 import os
 import random
 import re
+import unicodedata
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -90,30 +91,47 @@ def determiner_role(code_saisi: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Aide a l'adressage (memes tables que le bot SMS, dupliquees ici pour que
-# ce fichier reste totalement independant)
+# Aide a l'adressage (etablissements de sante + aeroport frequents) - memes
+# regles que adresses-nice.js (repo feuille-de-route-taxi) : un "alias"
+# (nom usuel, code court type CHU/CPI/T1...) ne sert qu'a la recherche,
+# jamais renvoye a la place du nom complet ; recherche insensible aux
+# accents ; une valeur qui ressemble deja a une adresse complete (au moins
+# une sequence de 2 chiffres - numero de rue ou code postal) n'est jamais
+# ecrasee.
 # ---------------------------------------------------------------------------
 
-ADRESSES_ETABLISSEMENTS_SANTE = {
-    "les sources": "Hopital Les Sources, 10 chemin Rene Pietruschi, 06100 Nice",
-    "saint-george": "Clinique Saint George, 2 avenue de Rimiez, 06100 Nice",
-    "saint george": "Clinique Saint George, 2 avenue de Rimiez, 06100 Nice",
-    "pasteur": "Hopital Pasteur, 30 avenue de la Voie Romaine, 06000 Nice",
-    "archet": "Hopital de l'Archet, 151 route Saint-Antoine de Ginestiere, 06200 Nice",
-    "lenval": "Hopitaux Pediatriques de Nice CHU-Lenval, 57 avenue de la Californie, 06200 Nice",
-    "antoine lacassagne": "Centre Antoine Lacassagne, 33 avenue de Valombrose, 06189 Nice",
-    "lacassagne": "Centre Antoine Lacassagne, 33 avenue de Valombrose, 06189 Nice",
-    "parc imperial": "Clinique du Parc Imperial, 28 boulevard du Tzarewitch, 06000 Nice",
-    "saint-antoine": "Clinique Saint-Antoine, 7 avenue Durante, 06000 Nice",
-    "saint antoine": "Clinique Saint-Antoine, 7 avenue Durante, 06000 Nice",
-    "santa maria": "Polyclinique Santa Maria, 57 avenue de la Californie, 06200 Nice",
-    "saint-francois": "Clinique Saint-Francois, 10 boulevard Pasteur, 06000 Nice",
-    "saint francois": "Clinique Saint-Francois, 10 boulevard Pasteur, 06000 Nice",
-    "cimiez": "Hopital Cimiez, 4 avenue Reine Victoria, 06003 Nice",
-    "saint jean": "Polyclinique Saint Jean, 92 avenue du Docteur Maurice Donat, 06800 Cagnes-sur-Mer",
-    "tzanck": "Institut Arnault Tzanck, 231 avenue du Docteur Maurice Donat, 06721 Saint-Laurent-du-Var",
-    "crc nice": "Institut Arnault Tzanck, 231 avenue du Docteur Maurice Donat, 06721 Saint-Laurent-du-Var",
-}
+ETABLISSEMENTS_SANTE_NICE = [
+    {"nom": "Hôpital Les Sources", "alias": ["Les Sources B1"], "adresse": "10 chemin René Pietruschi, 06100 Nice"},
+    {"nom": "Clinique Saint George", "alias": ["Saint Georges", "Saint-Georges", "CSG", "STG"], "adresse": "2 avenue de Rimiez, 06100 Nice"},
+    {"nom": "Hôpital Pasteur", "alias": ["Pasteur 2", "CHU"], "adresse": "30 avenue de la Voie Romaine, 06000 Nice"},
+    {"nom": "Hôpital de l'Archet", "alias": ["Archet 1", "Archet 2", "CHU"], "adresse": "151 route Saint-Antoine de Ginestière, 06200 Nice"},
+    {"nom": "Hôpitaux Pédiatriques de Nice CHU-Lenval", "alias": ["Lenval", "CHU", "pédiatrique"], "adresse": "57 avenue de la Californie, 06200 Nice"},
+    {"nom": "Centre Antoine Lacassagne", "alias": ["Lacassagne", "CAL"], "adresse": "33 avenue de Valombrose, 06189 Nice"},
+    {"nom": "Clinique du Parc Impérial", "alias": ["Parc Imperial", "CPI"], "adresse": "28 boulevard du Tzarewitch, 06000 Nice"},
+    {"nom": "Clinique Saint-Antoine", "alias": ["Saint Antoine"], "adresse": "7 avenue Durante, 06000 Nice"},
+    {"nom": "Polyclinique Santa Maria", "alias": [], "adresse": "57 avenue de la Californie, 06200 Nice"},
+    {"nom": "Clinique Saint-François", "alias": ["Saint Francois"], "adresse": "10 boulevard Pasteur, 06000 Nice"},
+    {"nom": "Hôpital Saint-Roch", "alias": ["CHU"], "adresse": "5 rue Pierre Dévoluy, 06000 Nice"},
+    {"nom": "Hôpital de Cimiez", "alias": ["CHU", "gériatrie"], "adresse": "4 avenue Reine Victoria, 06003 Nice"},
+    {"nom": "Polyclinique Saint Jean", "alias": [], "adresse": "92 avenue du Docteur Maurice Donat, 06800 Cagnes-sur-Mer"},
+    {"nom": "Institut Arnault Tzanck", "alias": ["CRC Nice"], "adresse": "231 avenue du Docteur Maurice Donat, 06721 Saint-Laurent-du-Var"},
+    {"nom": "Aéroport Nice Côte d'Azur - Terminal 1", "alias": ["T1"], "adresse": "Boulevard Maryse Bastié, 06200 Nice"},
+    {"nom": "Aéroport Nice Côte d'Azur - Terminal 2", "alias": ["T2"], "adresse": "Boulevard Jacqueline Auriol Supérieur, 06200 Nice"},
+]
+
+# Sous-ensemble utilise pour les boutons "Etablissements favoris" (page
+# secretaire) - l'aeroport n'y figure pas, ces boutons remplissent la
+# prise en charge, presque toujours un etablissement de sante.
+ETABLISSEMENTS_FAVORIS = [e for e in ETABLISSEMENTS_SANTE_NICE if "Aéroport" not in e["nom"]]
+
+
+def sans_accents(texte: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", texte or "") if unicodedata.category(c) != "Mn")
+
+
+def _texte_recherche(etablissement: dict) -> str:
+    return sans_accents(" ".join([etablissement["nom"]] + etablissement["alias"])).lower()
+
 
 VILLES_CONNUES = [
     "nice", "cagnes-sur-mer", "cagnes sur mer", "saint-laurent-du-var",
@@ -125,10 +143,17 @@ VILLES_CONNUES = [
 
 
 def resoudre_adresse_medicale(adresse: str) -> str:
-    adresse_minuscule = (adresse or "").lower()
-    for cle, adresse_complete in ADRESSES_ETABLISSEMENTS_SANTE.items():
-        if cle in adresse_minuscule:
-            return adresse_complete
+    """Reprend les memes regles que resoudre() dans adresses-nice.js (repo
+    feuille-de-route-taxi) : si la valeur ne ressemble pas deja a une
+    adresse complete et correspond a un etablissement connu (nom usuel ou
+    alias, avec ou sans accents), on renvoie "Nom complet, adresse exacte"."""
+    valeur = (adresse or "").strip()
+    if not valeur or re.search(r"\d{2,}", valeur):
+        return adresse
+    valeur_normalisee = sans_accents(valeur).lower()
+    for etablissement in ETABLISSEMENTS_SANTE_NICE:
+        if valeur_normalisee in _texte_recherche(etablissement):
+            return f"{etablissement['nom']}, {etablissement['adresse']}"
     return adresse
 
 
@@ -969,10 +994,10 @@ FORMULAIRE_RESERVATION_HTML = """
         {% if role == 'secretaire' %}
         <label style="margin-top: 14px;">Etablissements favoris</label>
         <div class="raccourcis">
-          {% for nom_etablissement in ['Les Sources B1', 'Pasteur', "L'Archet", 'Saint-Georges', 'Lenval', 'Antoine Lacassagne', 'Parc Imperial', 'Saint-Antoine', 'Santa Maria', 'Saint-Francois', 'Cimiez', 'Saint Jean', 'Tzanck'] %}
-          <button type="button" onclick="document.getElementById('prise_en_charge').value = '{{ nom_etablissement }}'">
+          {% for etablissement in etablissements_favoris %}
+          <button type="button" onclick="document.getElementById('prise_en_charge').value = {{ (etablissement.nom ~ ', ' ~ etablissement.adresse) | tojson }}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M6 21V7l6-4 6 4v14M9 9h1M9 13h1M14 9h1M14 13h1M10 21v-4h4v4"/></svg>
-            {{ nom_etablissement }}
+            {{ etablissement.nom }}
           </button>
           {% endfor %}
         </div>
@@ -1109,6 +1134,42 @@ FORMULAIRE_RESERVATION_HTML = """
 </div>
 
 <script>
+  // Pre-remplissage des adresses par mot-cle (etablissements de sante,
+  // aeroport...) - memes regles que adresses-nice.js dans le repo
+  // feuille-de-route-taxi : taper un nom usuel ou un alias ("pasteur",
+  // "tzanck", "CHU"...) remplace la valeur du champ par "Nom complet,
+  // adresse exacte" a la sortie du champ (blur), sauf si la valeur saisie
+  // ressemble deja a une adresse complete (au moins 2 chiffres a la suite -
+  // numero de rue ou code postal), auquel cas on ne touche a rien.
+  const ETABLISSEMENTS_SANTE_NICE = {{ etablissements_sante | tojson }};
+
+  function sansAccents(texte) {
+    return texte.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  function texteRechercheEtablissement(etablissement) {
+    return sansAccents([etablissement.nom].concat(etablissement.alias).join(' ')).toLowerCase();
+  }
+
+  function resoudreAdresseSante(valeur) {
+    if (!valeur) return null;
+    const v = valeur.trim();
+    if (!v || /\d{2,}/.test(v)) return null;
+    const vNormalise = sansAccents(v).toLowerCase();
+    const trouve = ETABLISSEMENTS_SANTE_NICE.find(function (etablissement) {
+      return texteRechercheEtablissement(etablissement).indexOf(vNormalise) !== -1;
+    });
+    return trouve ? trouve.nom + ', ' + trouve.adresse : null;
+  }
+
+  [document.getElementById('prise_en_charge'), document.getElementById('destination')].forEach(function (champ) {
+    if (!champ) return;
+    champ.addEventListener('blur', function () {
+      const resolue = resoudreAdresseSante(champ.value);
+      if (resolue) champ.value = resolue;
+    });
+  });
+
   const caseInconnue = document.getElementById('heure_inconnue');
   const champPC = document.getElementById('heure_pc');
   const champRDV = document.getElementById('heure_rdv');
@@ -1464,6 +1525,7 @@ def page_reservation():
         FORMULAIRE_RESERVATION_HTML, erreur=None, date_min=date_min, valeurs={},
         mode_admin=(role is not None), role=role,
         admin_code=code_saisi if role else "",
+        etablissements_sante=ETABLISSEMENTS_SANTE_NICE, etablissements_favoris=ETABLISSEMENTS_FAVORIS,
     )
 
 
@@ -1480,6 +1542,7 @@ def valider_reservation():
             FORMULAIRE_RESERVATION_HTML, erreur=message, date_min=date_min, valeurs=valeurs,
             mode_admin=mode_admin, role=role,
             admin_code=code_saisi if role else "",
+            etablissements_sante=ETABLISSEMENTS_SANTE_NICE, etablissements_favoris=ETABLISSEMENTS_FAVORIS,
         )
 
     prenom = (request.form.get("prenom") or "").strip()
