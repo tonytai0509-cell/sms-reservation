@@ -911,10 +911,6 @@ FORMULAIRE_RESERVATION_HTML = """
 
       {% if role == 'secretaire' %}
         <input type="hidden" name="type_course" value="medical">
-        <label for="commentaire" style="margin-top: 14px;">Commentaire (optionnel)</label>
-        <textarea id="commentaire" name="commentaire" rows="2"
-                  placeholder="Ex : attendre en salle d'attente, code portail 1234..."
-                  style="width:100%; padding:12px 14px; border:1px solid #ddd; border-radius:10px; font:inherit; resize:vertical;">{{ valeurs.get('commentaire', '') }}</textarea>
       {% elif mode_admin %}
       <div class="choix">
         <label for="type_prive">
@@ -1025,6 +1021,13 @@ FORMULAIRE_RESERVATION_HTML = """
                  placeholder="{% if not mode_admin and role != 'secretaire' and valeurs.get('type_course') == 'medical' %}Ex : Hopital Pasteur 2{% else %}Ex : Aeroport de Nice{% endif %}"
                  value="{{ valeurs.get('destination', '') }}" required>
         </div>
+
+        {% if role == 'secretaire' %}
+        <label for="commentaire" style="margin-top: 14px;">Commentaire (optionnel)</label>
+        <textarea id="commentaire" name="commentaire" rows="2"
+                  placeholder="Ex : attendre en salle d'attente, code portail 1234..."
+                  style="width:100%; padding:12px 14px; border:1px solid #ddd; border-radius:10px; font:inherit; resize:vertical;">{{ valeurs.get('commentaire', '') }}</textarea>
+        {% endif %}
       </div>
     </div>
     </div>
