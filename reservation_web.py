@@ -374,6 +374,7 @@ def creer_evenement_agenda(donnees: dict, reference: str) -> tuple[bool, str, st
         + ("\nACCOMPAGNANT : OUI" if donnees.get("accompagnant") else "")
         + ("\nBT : AU RETOUR UNIQUEMENT" if donnees.get("bto_retour") else "")
         + ("\nRAPPEL : NON" if donnees.get("mode_admin") else "")
+        + (f"\nCOMMENTAIRE : {donnees['commentaire']}" if donnees.get("commentaire") else "")
     ).upper()
 
     try:
@@ -910,6 +911,10 @@ FORMULAIRE_RESERVATION_HTML = """
 
       {% if role == 'secretaire' %}
         <input type="hidden" name="type_course" value="medical">
+        <label for="commentaire" style="margin-top: 14px;">Commentaire (optionnel)</label>
+        <textarea id="commentaire" name="commentaire" rows="2"
+                  placeholder="Ex : attendre en salle d'attente, code portail 1234..."
+                  style="width:100%; padding:12px 14px; border:1px solid #ddd; border-radius:10px; font:inherit; resize:vertical;">{{ valeurs.get('commentaire', '') }}</textarea>
       {% elif mode_admin %}
       <div class="choix">
         <label for="type_prive">
@@ -1403,6 +1408,9 @@ CONFIRMATION_RESERVATION_HTML = """
       <tr><td class="libelle">Nom</td><td>{{ donnees['nom'] }}</td></tr>
       <tr><td class="libelle">Prise en charge</td><td>{{ donnees['prise_en_charge'] }}</td></tr>
       <tr><td class="libelle">Destination</td><td>{{ donnees['destination'] }}</td></tr>
+      {% if donnees.get('commentaire') %}
+      <tr><td class="libelle">Commentaire</td><td>{{ donnees['commentaire'] }}</td></tr>
+      {% endif %}
       {% if not occurrences %}
       <tr><td class="libelle">Heure de passage</td><td>{{ donnees['heure'] }}</td></tr>
       {% if donnees.get('heure_rdv') %}
@@ -1553,6 +1561,7 @@ def valider_reservation():
     accompagnant = request.form.get("accompagnant") == "oui"
     bto_retour = request.form.get("bto_retour") == "oui"
     nom_infirmiere = (request.form.get("nom_infirmiere") or "").strip()
+    commentaire = (request.form.get("commentaire") or "").strip()
     prise_en_charge = (request.form.get("prise_en_charge") or "").strip()
     destination = (request.form.get("destination") or "").strip()
     date_str = (request.form.get("date") or "").strip()
@@ -1594,6 +1603,7 @@ def valider_reservation():
         "mode_admin": mode_admin,
         "role": role,
         "nom_infirmiere": nom_infirmiere or None,
+        "commentaire": commentaire or None,
         "accompagnant": accompagnant,
         "bto_retour": bto_retour,
         "telephone": telephone,
