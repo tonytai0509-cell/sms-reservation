@@ -1506,8 +1506,31 @@ def manifest_web_app():
     return json.dumps(manifest, ensure_ascii=False), 200, {"Content-Type": "application/manifest+json"}
 
 
+# Redirection vers le lien de reservation personnel de l'appli EasyTaxi
+# (https://app.easytaxi-app.fr/r/...) : les QR codes et cartes deja
+# imprimes qui pointent sur /reserver menent alors au compte du chauffeur
+# dans l'appli. Variable Railway REDIRECTION_RESERVATION : vide = ancienne
+# page inchangee. Les acces administrateur (?admin=...) ne sont jamais
+# redirigés, sauf celui des secretaires / infirmieres, envoye vers le mode
+# "Reserve par" de la meme page EasyTaxi (?infirmiere=1).
+def redirection_reservation():
+    cible = (os.environ.get("REDIRECTION_RESERVATION") or "").strip()
+    if not cible.startswith("https://"):
+        return None
+    code = request.args.get("admin")
+    if not code:
+        return redirect(cible, code=302)
+    if determiner_role(code) == "secretaire":
+        separateur = "&" if "?" in cible else "?"
+        return redirect(cible + separateur + "infirmiere=1", code=302)
+    return None
+
+
 @app.route("/", methods=["GET"])
 def racine():
+    renvoi = redirection_reservation()
+    if renvoi:
+        return renvoi
     code = request.args.get("admin", "")
     destination = f"/reserver?admin={code}" if code else "/reserver"
     return redirect(destination)
@@ -1529,6 +1552,9 @@ def api_client():
 
 @app.route("/reserver", methods=["GET"])
 def page_reservation():
+    renvoi = redirection_reservation()
+    if renvoi:
+        return renvoi
     date_min = datetime.now(FUSEAU_HORAIRE).strftime("%Y-%m-%d")
     code_saisi = request.args.get("admin")
     role = determiner_role(code_saisi)
